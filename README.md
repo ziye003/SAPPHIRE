@@ -247,7 +247,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Contact
 
 - **Issues**: [GitHub Issues](https://github.com/ziye003/SAPPHIRE/issues)
-- **Email**: yexxx399@umn.edu@umn.edu
+- **Email**: yexxx399@umn.edu
 
 ## Acknowledgments
 
