@@ -207,14 +207,7 @@ results = load_results(
 
 ## Example Datasets
 
-We provide example analyses on seven datasets:
-- Cardiomyocyte maturation (Friedman et al., 2018)
-- Definitive endoderm (Chu et al., 2016)
-- Embryoid body (Tung et al., 2017)
-- Kidney organoids (Phipson et al., 2019)
-- Neuronal differentiation (Yao et al., 2018)
-- Pulmonary fibrosis (Habermann et al., 2020)
-- Cross-species development (Pijuan-Sala et al., 2019)
+We provide example analyses on test datasets
 
 See `examples/` directory for complete workflows.
 
