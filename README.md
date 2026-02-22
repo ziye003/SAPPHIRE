@@ -211,6 +211,21 @@ We provide example analyses on test datasets
 
 See `examples/` directory for complete workflows.
 
+## Quick Test
+```bash
+# Clone repository
+git clone https://github.com/ziye003/SAPPHIRE.git
+cd SAPPHIRE
+
+# Install
+pip install -e .
+
+# Run example
+python examples/run_example.py
+```
+
+Example dataset included in `examples/data/example_small.h5ad`
+
 ## Troubleshooting
 
 **Q: "Cannot find time column" error**  
