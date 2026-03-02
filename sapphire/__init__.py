@@ -14,7 +14,7 @@ compute_sapphire_score : Calculate network entropy
 compute_plasticity_decomposition : Decompose into entropy and dispersion
 run_sapphire_pipeline : Complete pipeline wrapper
 
-Author: SAPPHIRE Development Team
+Author: Zi Ye
 License: MIT
 Version: 1.0.0
 """
@@ -32,7 +32,7 @@ from .pipeline import run_sapphire_pipeline
 from .utils import plot_sapphire_results, save_results
 
 __version__ = "1.0.0"
-__author__ = "SAPPHIRE Development Team"
+__author__ = "Zi Ye"
 __license__ = "MIT"
 
 __all__ = [
