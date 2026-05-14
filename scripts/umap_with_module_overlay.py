@@ -1,15 +1,15 @@
 """
 umap_with_module_overlay.py
 ============================
-生成三类 UMAP 图，直接拿去跑，不需要改任何东西。
+Generate three types of UMAP plots. Run as-is; no configuration needed.
 
-输出（data/umap_overlay/）：
-  1. ALL_datasets_umap_timepoint.png       — 4个数据集 timepoint，2×2
-  2. {Dataset}_umap_sapphire_scores.png    — timepoint / entropy / dispersion / composite，每个数据集1张
-  3. Cardiomyocyte_umap_module_overlay.png — M4等关键模块 activation overlay（导师要的）
-  4. ALL_umap_module_overlay.png           — 4个数据集各自最关键模块，2×2总览
+Output (data/umap_overlay/):
+  1. ALL_datasets_umap_timepoint.png       -- 4 datasets, timepoint, 2x2
+  2. {Dataset}_umap_sapphire_scores.png    -- timepoint/entropy/dispersion/composite, 1 per dataset
+  3. Cardiomyocyte_umap_module_overlay.png -- key module activation overlays (M4, etc.)
+  4. ALL_umap_module_overlay.png           -- key module per dataset, 2x2 overview
 
-用法：
+Usage:
     conda activate liver_adar1_py
     cd /Users/ziye/Documents/sapphire_package/
     python umap_with_module_overlay.py
@@ -28,7 +28,7 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.gridspec import GridSpec
 warnings.filterwarnings("ignore")
 
-# ── 加载核心 ──────────────────────────────────────────────────
+# Load core
 sys.path.insert(0, "/Users/ziye/Documents/sapphire_package/")
 exec(open("/Users/ziye/Documents/sapphire_package/sapphire_core_v2.py").read(), globals())
 
@@ -39,7 +39,7 @@ sc.settings.verbosity = 0
 
 TARGET = ["Cardiomyocyte", "Endoderm", "Kidney", "Neuro"]
 
-# 每个数据集 highlight 的关键模块（根据论文 GO enrichment 结果）
+# Key modules per dataset (based on GO enrichment results in the paper)
 KEY_MODULES = {
     "Cardiomyocyte": {
         "M4": ("Cardiac Commitment\n(heart contraction, D2 peak)", "#E63946"),
@@ -63,7 +63,7 @@ KEY_MODULES = {
     },
 }
 
-# ── 工具函数 ─────────────────────────────────────────────────
+# Utility functions
 
 def sort_tp(tp):
     m = re.search(r"(\d+(?:\.\d+)?)", str(tp))
@@ -98,7 +98,7 @@ def scatter_ax(ax, x, y, c, cmap, vmin, vmax, s=3, alpha=0.6, title="", xlabel=T
 
 
 # ════════════════════════════════════════════════════════════════
-# Figure 1: Timepoint UMAP — 4 datasets, 2×2
+# Figure 1: Timepoint UMAP — 4 datasets, 2x2
 # ════════════════════════════════════════════════════════════════
 print("\n" + "="*60)
 print("  Figure 1: Timepoint UMAP (all 4 datasets)")
@@ -143,11 +143,11 @@ plt.tight_layout()
 out = os.path.join(OUT_DIR, "ALL_datasets_umap_timepoint.png")
 fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
 plt.close()
-print(f"\n  → {out}")
+print(f"\n  -> {out}")
 
 
 # ════════════════════════════════════════════════════════════════
-# Figure 2: SAPPHIRE score overlay — per dataset, 1×4 panels
+# Figure 2: SAPPHIRE score overlay — per dataset, 1x4 panels
 #   [timepoint | entropy | dispersion | composite]
 # ════════════════════════════════════════════════════════════════
 print("\n" + "="*60)
@@ -217,7 +217,7 @@ for ds_name in TARGET:
     fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
     plt.close()
     del adata, pc_df; gc.collect()
-    print(f"  → {out}")
+    print(f"  -> {out}")
 
 
 # ════════════════════════════════════════════════════════════════
@@ -267,7 +267,7 @@ pal = tp_palette(tps)
 fig, axes = plt.subplots(1, 5, figsize=(24, 5))
 fig.suptitle(
     "Cardiomyocyte — UMAP with Module Activation Overlays\n"
-    "M4 shows transient cardiac commitment peak at D2 (1.67× baseline, p < 2.2×10⁻³⁰⁸)",
+    "M4 shows transient cardiac commitment peak at D2 (1.67x baseline, p < 2.2x10^-308)",
     fontsize=12, fontweight="bold")
 
 # Panel 0: timepoint
@@ -288,7 +288,7 @@ ax.set_aspect("equal", adjustable="datalim")
 for ax, (mod_id, cmap_name, title) in zip(axes[1:4], [
     ("M4", "YlOrRd",  "M4: Cardiac Commitment\n(heart contraction, D2 peak)"),
     ("M6", "Blues",   "M6: Cell Cycle\n(mitotic segregation, early)"),
-    ("M2", "Greens",  "M2: Terminal Maturation\n(RNA splicing, D15–D30)"),
+    ("M2", "Greens",  "M2: Terminal Maturation\n(RNA splicing, D15-D30)"),
 ]):
     vals = mod_activation.get(mod_id, np.zeros(len(u1)))
     vmin, vmax = np.percentile(vals, 2), np.percentile(vals, 98)
@@ -317,18 +317,18 @@ out = os.path.join(OUT_DIR, "Cardiomyocyte_umap_module_overlay.png")
 fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
 plt.close()
 del adata, mod_activation, pc_df; gc.collect()
-print(f"  → {out}")
+print(f"  -> {out}")
 
 
 # ════════════════════════════════════════════════════════════════
-# Figure 4: 2×2 module overlay overview — all 4 datasets
+# Figure 4: 2x2 module overlay overview — all 4 datasets
 #   Each dataset: timepoint (left) + key transitional module (right)
 # ════════════════════════════════════════════════════════════════
 print("\n" + "="*60)
-print("  Figure 4: Module overlay overview (all datasets, 2×4 panels)")
+print("  Figure 4: Module overlay overview (all datasets, 2x4 panels)")
 print("="*60)
 
-# Key module per dataset (the most biologically interesting transitional one)
+# Key module per dataset (most biologically informative transitional module)
 HIGHLIGHT = {
     "Cardiomyocyte": ("M4", "YlOrRd",  "M4: Cardiac Commitment (D2 peak)"),
     "Endoderm":      ("M8", "Oranges", "M8: Wnt Signalling (gut morphogenesis)"),
@@ -364,7 +364,6 @@ for row, ds_name in enumerate(["Cardiomyocyte", "Endoderm"]):
     pal = tp_palette(tps)
 
     # Timepoint panel
-    ax = axes[row, 0] if ds_name == "Cardiomyocyte" else axes[row-1, 2]
     ax_col = 0 if ds_name == "Cardiomyocyte" else 2
     ax = axes[0 if ds_name=="Cardiomyocyte" else 1, ax_col]
     for tp in tps:
@@ -446,11 +445,11 @@ plt.tight_layout()
 out = os.path.join(OUT_DIR, "ALL_umap_module_overlay.png")
 fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
 plt.close()
-print(f"  → {out}")
+print(f"  -> {out}")
 
 print("\n" + "="*60)
-print(f"  ✅ Done!  输出目录：{OUT_DIR}")
+print(f"  Done! Output dir: {OUT_DIR}")
 print("="*60)
-print("\n生成的文件：")
+print("\nFiles generated:")
 for f in sorted(os.listdir(OUT_DIR)):
     print(f"  {f}")

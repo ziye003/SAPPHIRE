@@ -1,17 +1,17 @@
 """
 umap_plots.py
 =============
-1. 细胞 UMAP，颜色 = timepoint（多面板，每个数据集一张子图）
-2. 细胞 UMAP，颜色 = pathway_entropy / network_dispersion / composite
-   （叠加 SAPPHIRE 分数，直观展示与轨迹的对应关系）
+1. Cell UMAP coloured by timepoint (multi-panel, one subplot per dataset)
+2. Cell UMAP coloured by pathway_entropy / network_dispersion / composite
+   (SAPPHIRE score overlays, illustrating correspondence with trajectory)
 
-用法：
+Usage:
     conda activate liver_adar1_py
     python umap_plots.py
 
-输出（data/umap/）：
-    ALL_datasets_umap_timepoint.png   — 4个数据集 timepoint UMAP 并排
-    {Dataset}_umap_scores.png         — 每个数据集 3个分数的 UMAP
+Output (data/umap/):
+    ALL_datasets_umap_timepoint.png   -- 4 datasets side by side, timepoint colouring
+    {Dataset}_umap_scores.png         -- 3 SAPPHIRE score panels per dataset
 """
 
 import os, sys, gc, re, warnings
@@ -26,7 +26,7 @@ from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
 warnings.filterwarnings("ignore")
 
-# ── 路径 ──────────────────────────────────────────────────────
+# Paths
 sys.path.insert(0, "/Users/ziye/Documents/sapphire_package/")
 exec(open("/Users/ziye/Documents/sapphire_package/sapphire_core.py").read(), globals())
 
@@ -36,9 +36,8 @@ os.makedirs(OUT_DIR, exist_ok=True)
 
 sc.settings.verbosity = 0
 
-# ── Timepoint 颜色方案（每个数据集独立渐变）────────────────────
+# Timepoint colour scheme (independent gradient per dataset; early=light, late=dark)
 def tp_palette(tps):
-    """浅→深蓝绿渐变，early=浅，late=深"""
     cmap = plt.cm.viridis
     return {tp: cmap(i / max(len(tps) - 1, 1)) for i, tp in enumerate(tps)}
 
@@ -46,17 +45,16 @@ def sort_tp(tp):
     m = re.search(r"(\d+(?:\.\d+)?)", str(tp))
     return float(m.group(1)) if m else 0.0
 
-# ── 计算或复用 UMAP ────────────────────────────────────────────
+# Compute or reuse UMAP embedding
 def get_umap(adata, dataset_name):
     """
-    如果 adata.obsm 已有 X_umap，直接用。
-    否则：PCA → neighbors → UMAP。
+    Reuse X_umap if already present; otherwise compute PCA -> neighbors -> UMAP.
     """
     if "X_umap" in adata.obsm:
-        print(f"  [INFO] 已有 UMAP，直接使用")
+        print(f"  [INFO] Existing UMAP found, reusing")
         return adata
 
-    print(f"  [INFO] 计算 UMAP...")
+    print(f"  [INFO] Computing UMAP...")
     if "X_pca" not in adata.obsm:
         sc.tl.pca(adata, n_comps=min(50, adata.n_vars - 1), random_state=0)
     sc.pp.neighbors(adata, n_neighbors=15, n_pcs=40, random_state=0)
@@ -65,7 +63,7 @@ def get_umap(adata, dataset_name):
 
 
 # ════════════════════════════════════════════════════════════════
-# Figure 1：4个数据集 timepoint UMAP，2×2 布局
+# Figure 1: Timepoint UMAP — all 4 datasets, 2x2 layout
 # ════════════════════════════════════════════════════════════════
 
 print("\n" + "="*60)
@@ -92,7 +90,7 @@ for ax, ds_name in zip(axes, TARGET):
     umap1 = adata.obsm["X_umap"][:, 0]
     umap2 = adata.obsm["X_umap"][:, 1]
 
-    # 按 timepoint 分层画（early 在下，late 在上）
+    # Layer by timepoint (early drawn first, late on top)
     for tp in tps:
         mask = (adata.obs[time_col] == tp).values
         ax.scatter(umap1[mask], umap2[mask],
@@ -105,7 +103,7 @@ for ax, ds_name in zip(axes, TARGET):
     ax.tick_params(labelsize=8)
     ax.grid(False)
 
-    # 图例（小点）
+    # Legend
     handles = [mpatches.Patch(color=palette[tp], label=tp) for tp in tps]
     ax.legend(handles=handles, title="Timepoint", fontsize=8,
               title_fontsize=8, markerscale=2,
@@ -119,12 +117,12 @@ plt.tight_layout()
 out1 = os.path.join(OUT_DIR, "ALL_datasets_umap_timepoint.png")
 fig.savefig(out1, dpi=150, bbox_inches="tight")
 plt.close()
-print(f"\n  Saved → {out1}")
+print(f"\n  Saved -> {out1}")
 
 
 # ════════════════════════════════════════════════════════════════
-# Figure 2：每个数据集，4 panel UMAP
-#   左1：timepoint  |  右3：entropy / dispersion / composite
+# Figure 2: SAPPHIRE score overlay — per dataset, 1x4 panels
+#   [timepoint | entropy | dispersion | composite]
 # ════════════════════════════════════════════════════════════════
 
 print("\n" + "="*60)
@@ -142,7 +140,7 @@ for ds_name in TARGET:
     time_col = cfg["time_col"]
     print(f"\n  {ds_name}")
 
-    # 加载数据 + UMAP
+    # Load data + UMAP
     adata = load_and_prepare(ds_name, cfg)
     if adata.n_vars > SAPPHIRE_PARAMS["n_top_genes"]:
         adata = hvg_filter(adata, SAPPHIRE_PARAMS["n_top_genes"])
@@ -151,12 +149,12 @@ for ds_name in TARGET:
     umap1 = adata.obsm["X_umap"][:, 0]
     umap2 = adata.obsm["X_umap"][:, 1]
 
-    # 读 per-cell 分数
+    # Load per-cell scores
     csv_path = os.path.join(VAL_DIR, ds_name, f"{ds_name}_per_cell_metrics.csv")
     pc_df    = pd.read_csv(csv_path, index_col=0)
     pc_df["timepoint"] = pc_df["timepoint"].astype(str)
 
-    # 对齐 index（subsampling 可能导致顺序不同）
+    # Align index (subsampling may produce different ordering)
     shared_idx = adata.obs_names.intersection(pc_df.index)
     if len(shared_idx) < len(adata):
         print(f"  [WARN] {len(adata) - len(shared_idx)} cells not in CSV, subsetting")
@@ -173,7 +171,7 @@ for ds_name in TARGET:
     fig, axes = plt.subplots(1, 4, figsize=(20, 5))
     fig.suptitle(f"{ds_name} — UMAP", fontsize=13, fontweight="bold")
 
-    # Panel 0：timepoint
+    # Panel 0: timepoint
     ax = axes[0]
     for tp in tps:
         mask = (adata.obs[time_col] == tp).values
@@ -187,7 +185,7 @@ for ds_name in TARGET:
     ax.set_xlabel("UMAP 1", fontsize=9); ax.set_ylabel("UMAP 2", fontsize=9)
     ax.tick_params(labelsize=7); ax.grid(False)
 
-    # Panel 1–3：SAPPHIRE scores
+    # Panels 1-3: SAPPHIRE scores
     for ax, (col, (label, cmap_name)) in zip(axes[1:], SCORE_CMAPS.items()):
         vals = pc_df[col].values.astype(float)
         vmin, vmax = np.percentile(vals, 2), np.percentile(vals, 98)
@@ -207,10 +205,10 @@ for ds_name in TARGET:
     out2 = os.path.join(OUT_DIR, f"{ds_name}_umap_scores.png")
     fig.savefig(out2, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"  Saved → {out2}")
+    print(f"  Saved -> {out2}")
 
     del adata, pc_df; gc.collect()
 
 print("\n" + "="*60)
-print(f"  ✅ Done! 输出目录：{OUT_DIR}")
+print(f"  Done! Output dir: {OUT_DIR}")
 print("="*60 + "\n")

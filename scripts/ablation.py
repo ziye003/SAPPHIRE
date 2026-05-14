@@ -1,13 +1,15 @@
 """
-ablation_and_boxplot_v2.py
-==========================
-修复：
-  1. p-value 星号超出图框 → 改为图内固定位置标注
-  2. Network Dispersion violin 退化成线 → 改为 bar + bootstrap 95% CI
+ablation.py
+===========
+Ablation analysis: AUC comparison and per-timepoint score distributions.
 
-用法：
+Fixes applied:
+  1. p-value stars overflowing plot box -> fixed-position annotation inside plot
+  2. Network Dispersion violin collapsed to line -> replaced with bar + bootstrap 95% CI
+
+Usage:
     conda activate liver_adar1_py
-    python ablation_and_boxplot_v2.py
+    python ablation.py
 """
 
 import os, re, warnings
@@ -23,12 +25,12 @@ from scipy import stats
 try:
     import scikit_posthocs as sp
 except ImportError:
-    print("[ERROR] 请先安装：conda install -c conda-forge scikit-posthocs")
+    print("[ERROR] Please install: conda install -c conda-forge scikit-posthocs")
     raise
 
 warnings.filterwarnings("ignore")
 
-# ── 路径配置 ──────────────────────────────────────────────────────────────────
+# ── Path configuration ────────────────────────────────────────────────────────
 DATA_ROOT = "/Users/ziye/Documents/paper/data"
 VAL_DIR   = os.path.join(DATA_ROOT, "sapphire_validation_v2")
 OUT_DIR   = os.path.join(DATA_ROOT, "ablation")
@@ -47,7 +49,7 @@ METRIC_LABELS = {
     "composite":          "Composite Score",
 }
 
-# ── 工具函数 ──────────────────────────────────────────────────────────────────
+# ── Utility functions ─────────────────────────────────────────────────────────
 
 def sort_tp(tp):
     m = re.search(r"(\d+(?:\.\d+)?)", str(tp))
@@ -67,7 +69,7 @@ def stars(p):
     return "ns"
 
 def bootstrap_ci(values, n_boot=500, ci=95, seed=42):
-    """返回 mean, lower_err, upper_err（适合 ax.errorbar 的 yerr 格式）"""
+    """Return mean, lower_err, upper_err (suitable for ax.errorbar yerr format)."""
     rng = np.random.default_rng(seed)
     if len(values) == 0:
         return np.nan, np.nan, np.nan
@@ -80,7 +82,7 @@ def bootstrap_ci(values, n_boot=500, ci=95, seed=42):
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# Part 1: Ablation AUC（不变，直接复用）
+# Part 1: Ablation AUC
 # ════════════════════════════════════════════════════════════════════════════════
 
 print("\n" + "="*60)
@@ -116,7 +118,7 @@ auc_df_full = pd.concat([auc_df, mean_row], ignore_index=True)
 auc_df_full.to_csv(os.path.join(OUT_DIR, "ablation_auc_table.csv"), index=False)
 print(auc_df_full.to_string(index=False))
 
-# 条形图
+# Bar chart
 fig, ax = plt.subplots(figsize=(9, 5))
 n_ds = len(auc_df); x = np.arange(n_ds); w = 0.24
 for offset, col, color, lbl in [
@@ -143,9 +145,9 @@ print("Ablation barplot saved.")
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# Part 2: 改版 violin 图
-#   - Pathway Entropy & Composite：violin + jitter，p值在图内底部
-#   - Network Dispersion：bar + bootstrap 95% CI
+# Part 2: Score distribution plots
+#   - Pathway Entropy & Composite: violin + jitter, p-value annotated inside plot
+#   - Network Dispersion: bar + bootstrap 95% CI
 # ════════════════════════════════════════════════════════════════════════════════
 
 print("\n" + "="*60)
@@ -177,14 +179,14 @@ for ds, cfg in DATASETS.items():
         label  = METRIC_LABELS[metric]
         groups = [df.loc[df["timepoint"] == tp, metric].dropna().values for tp in tps]
 
-        # ── Kruskal-Wallis ────────────────────────────────────────────────────
+        # Kruskal-Wallis test
         valid = [g for g in groups if len(g) >= 3]
         if len(valid) >= 2:
             _, p_kw = stats.kruskal(*valid)
         else:
             p_kw = 1.0
 
-        # ── Dunn post-hoc（只算，不画线，改为在图内角落标注关键对）─────────
+        # Dunn post-hoc (compute only; annotate inside plot corner)
         dunn_text = ""
         if p_kw < 0.05 and len(valid) == n_tp:
             try:
@@ -196,16 +198,13 @@ for ds, cfg in DATASETS.items():
             except Exception:
                 pass
 
-        # ════════════════════════════════════════════════════════════════════
-        # Network Dispersion → bar + 95% CI（因为是 per-timepoint 常数）
-        # ════════════════════════════════════════════════════════════════════
+        # Network Dispersion -> bar + 95% CI (per-timepoint constant value)
         if metric == "network_dispersion":
             means, lo_errs, hi_errs = [], [], []
             for grp in groups:
                 if len(grp) == 0:
                     means.append(np.nan); lo_errs.append(0); hi_errs.append(0)
                 else:
-                    # dispersion 是常数，取唯一值；CI 用 bootstrap 在各 timepoint 细胞上
                     m, lo, hi = bootstrap_ci(grp)
                     means.append(m); lo_errs.append(lo); hi_errs.append(hi)
 
@@ -216,7 +215,7 @@ for ds, cfg in DATASETS.items():
                         yerr=[lo_errs, hi_errs],
                         fmt="none", color="black", capsize=4, linewidth=1.2, zorder=3)
 
-            # 在每个 bar 顶标数值
+            # Label value on top of each bar
             for xi, m in zip(x_pos, means):
                 if not np.isnan(m):
                     ax.text(xi, m + max(hi_errs) * 0.15,
@@ -228,7 +227,7 @@ for ds, cfg in DATASETS.items():
             ax.set_ylabel(label, fontsize=9)
             ax.grid(axis="y", alpha=0.3, linewidth=0.5)
 
-            # KW p 在标题，Dunn 在图内左上角
+            # KW p in title; Dunn in upper-left corner inside plot
             p_str = f"{p_kw:.2e}" if p_kw < 0.001 else f"{p_kw:.4f}"
             ax.set_title(f"{label}\nKruskal-Wallis p = {p_str}", fontsize=10)
             if dunn_text:
@@ -237,13 +236,11 @@ for ds, cfg in DATASETS.items():
                         va="top", ha="left",
                         bbox=dict(boxstyle="round,pad=0.3", fc="white",
                                   ec="gray", alpha=0.8))
-            continue   # 跳过下面的 violin 代码
+            continue   # skip violin code below
 
-        # ════════════════════════════════════════════════════════════════════
-        # Pathway Entropy & Composite → violin + jitter
-        # ════════════════════════════════════════════════════════════════════
+        # Pathway Entropy & Composite -> violin + jitter
 
-        # ── Violin ──
+        # Violin
         parts = ax.violinplot(
             groups, positions=range(n_tp),
             showmedians=True, showextrema=False, widths=0.7
@@ -254,7 +251,7 @@ for ds, cfg in DATASETS.items():
         parts["cmedians"].set_color("black")
         parts["cmedians"].set_linewidth(2)
 
-        # ── Jitter ──
+        # Jitter
         for i, grp in enumerate(groups):
             if len(grp) == 0:
                 continue
@@ -271,7 +268,7 @@ for ds, cfg in DATASETS.items():
         ax.set_ylabel(label, fontsize=9)
         ax.grid(axis="y", alpha=0.3, linewidth=0.5)
 
-        # ── p 值：KW 在标题，Dunn 在图内左上角（不超框）────────────────────
+        # KW p in title; Dunn in upper-left corner inside plot (no overflow)
         p_str = f"{p_kw:.2e}" if p_kw < 0.001 else f"{p_kw:.4f}"
         ax.set_title(f"{label}\nKruskal-Wallis p = {p_str}", fontsize=10)
 
@@ -282,7 +279,7 @@ for ds, cfg in DATASETS.items():
                     bbox=dict(boxstyle="round,pad=0.3", fc="white",
                               ec="gray", alpha=0.8))
 
-    # ── 图例 ──
+    # Legend
     patches = [mpatches.Patch(color=tp_colors[i], label=tps[i]) for i in range(n_tp)]
     fig.legend(handles=patches, title="Timepoint", loc="lower center",
                ncol=min(n_tp, 7), fontsize=8.5,
@@ -295,5 +292,5 @@ for ds, cfg in DATASETS.items():
     print(f"  Saved: {out_path}")
 
 print("\n" + "="*60)
-print("  ✅ Done! 输出目录：" + OUT_DIR)
+print("  Done! Output dir: " + OUT_DIR)
 print("="*60 + "\n")

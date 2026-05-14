@@ -1,14 +1,14 @@
 """
 SAPPHIRE Module Enrichment Analysis
 =====================================
-对模块基因做 GO_BP / KEGG / MSigDB Hallmark enrichment。
+Run GO_BP / KEGG / MSigDB Hallmark enrichment on module genes.
 
-用法：
-    python enrichment_analysis.py                        # 默认跑 cardiomyocyte
+Usage:
+    python enrichment_analysis.py                        # default: cardiomyocyte
     python enrichment_analysis.py --dataset endoderm
-    python enrichment_analysis.py --dataset all          # 跑全部4个数据集
+    python enrichment_analysis.py --dataset all          # all 4 datasets
 
-依赖：
+Dependencies:
     pip install gseapy matplotlib seaborn pandas numpy
 """
 
@@ -27,12 +27,12 @@ import matplotlib.pyplot as plt
 try:
     import gseapy as gp
 except ImportError:
-    print("[ERROR] gseapy 未安装，请运行：pip install gseapy")
+    print("[ERROR] gseapy not installed. Run: pip install gseapy")
     sys.exit(1)
 
 
 # ─────────────────────────────────────────────
-# 配置
+# Configuration
 # ─────────────────────────────────────────────
 
 GENE_SETS = {
@@ -47,24 +47,24 @@ ALL_DATASETS = ["cardiomyocyte", "endoderm", "kidney", "neuro"]
 
 
 # ─────────────────────────────────────────────
-# argparse（兼容 Jupyter）
+# Argument parsing (Jupyter-compatible)
 # ─────────────────────────────────────────────
 
 _jupyter = any("jupyter" in a or "ipykernel" in a for a in sys.argv)
 parser = argparse.ArgumentParser(description="SAPPHIRE Module Enrichment Analysis")
 parser.add_argument("--dataset",  default="cardiomyocyte",
-                    help="数据集名称，或 'all' 跑全部")
+                    help="Dataset name, or 'all' to run all datasets")
 parser.add_argument("--data_dir", default="/Users/ziye/Documents/paper/data",
-                    help="数据根目录")
+                    help="Root data directory")
 parser.add_argument("--top_n",   type=int, default=5,
-                    help="气泡图中每个模块展示的 top N 条目")
+                    help="Top N terms to show per module in bubble plot")
 parser.add_argument("--entropy_csv", default=None,
-                    help="（可选）包含模块真实熵值的 CSV，列名：module, entropy")
+                    help="(Optional) CSV with module entropy values; columns: module, entropy")
 args = parser.parse_args([] if _jupyter else None)
 
 
 # ─────────────────────────────────────────────
-# 工具函数
+# Utility functions
 # ─────────────────────────────────────────────
 
 def load_module_genes(long_csv_path):
@@ -72,13 +72,13 @@ def load_module_genes(long_csv_path):
     module_col = next((c for c in df.columns if "module" in c.lower()), None)
     gene_col   = next((c for c in df.columns if "gene"   in c.lower()), None)
     if module_col is None or gene_col is None:
-        raise ValueError(f"无法识别列名，实际列：{df.columns.tolist()}")
+        raise ValueError(f"Cannot identify column names. Columns found: {df.columns.tolist()}")
     module_genes = {}
     for mod, grp in df.groupby(module_col):
         genes = grp[gene_col].dropna().unique().tolist()
         if len(genes) >= 5:
             module_genes[str(mod)] = genes
-    print(f"  [INFO] {len(module_genes)} 个模块，共 {sum(len(v) for v in module_genes.values())} 个基因条目")
+    print(f"  [INFO] {len(module_genes)} modules, {sum(len(v) for v in module_genes.values())} total gene entries")
     return module_genes
 
 
@@ -98,7 +98,7 @@ def run_enrichr_for_module(genes, gene_set_name, module_id):
         res.insert(0, "Module", module_id)
         return res
     except Exception as e:
-        print(f"    [WARN] 模块 {module_id} / {gene_set_name} 失败: {e}")
+        print(f"    [WARN] Module {module_id} / {gene_set_name} failed: {e}")
         return pd.DataFrame()
 
 
@@ -106,16 +106,16 @@ def run_all_enrichments(module_genes, out_dir):
     os.makedirs(out_dir, exist_ok=True)
     results = {}
     for gs_key, gs_name in GENE_SETS.items():
-        print(f"\n  [INFO] 基因集：{gs_key} ({gs_name})")
+        print(f"\n  [INFO] Gene set: {gs_key} ({gs_name})")
         all_dfs = []
         for mod_id, genes in module_genes.items():
-            print(f"    模块 {mod_id}（{len(genes)} 基因）...", end=" ", flush=True)
+            print(f"    Module {mod_id} ({len(genes)} genes)...", end=" ", flush=True)
             df = run_enrichr_for_module(genes, gs_name, mod_id)
             if not df.empty:
-                print(f"{len(df)} 条显著结果")
+                print(f"{len(df)} significant results")
                 all_dfs.append(df)
             else:
-                print("无显著结果")
+                print("no significant results")
         if all_dfs:
             merged = pd.concat(all_dfs, ignore_index=True)
             merged.columns = [c.strip() for c in merged.columns]
@@ -134,13 +134,13 @@ def _get_col(df, candidates):
 
 
 # ─────────────────────────────────────────────
-# Summary table（每个数据集一个，含 Dataset 列）
+# Summary table (one per dataset, includes Dataset column)
 # ─────────────────────────────────────────────
 
 def make_summary_table(results, dataset_name, out_dir, top_n_per_module=3):
     """
-    生成 summary table，列：Dataset, Module, Gene_Set, Term, Adj_Pval, neg_log10_p
-    文件名：<dataset>_enrichment_summary.csv
+    Build summary table with columns: Dataset, Module, Gene_Set, Term, Adj_Pval, neg_log10_p.
+    Output filename: <dataset>_enrichment_summary.csv
     """
     rows = []
     for gs_key, df in results.items():
@@ -168,12 +168,12 @@ def make_summary_table(results, dataset_name, out_dir, top_n_per_module=3):
     summary  = pd.DataFrame(rows)
     out_path = os.path.join(out_dir, f"{dataset_name.lower()}_enrichment_summary.csv")
     summary.to_csv(out_path, index=False)
-    print(f"\n  [INFO] {dataset_name} summary → {out_path}")
+    print(f"\n  [INFO] {dataset_name} summary -> {out_path}")
     return summary
 
 
 # ─────────────────────────────────────────────
-# 气泡图
+# Bubble plot
 # ─────────────────────────────────────────────
 
 def plot_bubble(df, gs_key, dataset_name, top_n, out_dir):
@@ -207,7 +207,7 @@ def plot_bubble(df, gs_key, dataset_name, top_n, out_dir):
         return
 
     plot_df[term_col] = plot_df[term_col].apply(
-        lambda x: x[:55] + "…" if len(str(x)) > 55 else x)
+        lambda x: x[:55] + "..." if len(str(x)) > 55 else x)
 
     modules = sorted(plot_df["Module"].unique(),
                      key=lambda x: int(x[1:]) if x[1:].isdigit() else x)
@@ -229,7 +229,7 @@ def plot_bubble(df, gs_key, dataset_name, top_n, out_dir):
     sm = plt.cm.ScalarMappable(cmap="YlOrRd", norm=plt.Normalize(0, vmax))
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=ax, shrink=0.4, pad=0.02)
-    cbar.set_label("-log₁₀(adj. p-value)", fontsize=9)
+    cbar.set_label("-log10(adj. p-value)", fontsize=9)
 
     ax.set_xticks(range(n_mods))
     ax.set_xticklabels(modules, fontsize=9)
@@ -243,11 +243,11 @@ def plot_bubble(df, gs_key, dataset_name, top_n, out_dir):
     out_path = os.path.join(out_dir, f"bubble_{gs_key}.png")
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    print(f"  [INFO] 气泡图 → {out_path}")
+    print(f"  [INFO] Bubble plot -> {out_path}")
 
 
 # ─────────────────────────────────────────────
-# 单个数据集流程
+# Single-dataset pipeline
 # ─────────────────────────────────────────────
 
 def run_one_dataset(dataset, data_dir, top_n, entropy_csv=None):
@@ -257,12 +257,12 @@ def run_one_dataset(dataset, data_dir, top_n, entropy_csv=None):
     out_dir  = os.path.join(data_dir, "enrichment", dataset)
 
     print(f"\n{'='*60}")
-    print(f"  数据集：{dataset.upper()}")
+    print(f"  Dataset: {dataset.upper()}")
     print(f"{'='*60}")
 
     if not os.path.exists(long_csv):
-        print(f"  [SKIP] 找不到文件：{long_csv}")
-        print(f"  请先运行：python export_module_genes.py --dataset {dataset}")
+        print(f"  [SKIP] File not found: {long_csv}")
+        print(f"  Run first: python export_module_genes.py --dataset {dataset}")
         return pd.DataFrame()
 
     module_genes = load_module_genes(long_csv)
@@ -277,7 +277,7 @@ def run_one_dataset(dataset, data_dir, top_n, entropy_csv=None):
 
 
 # ─────────────────────────────────────────────
-# 主流程
+# Main
 # ─────────────────────────────────────────────
 
 def main():
@@ -289,7 +289,7 @@ def main():
 
     print(f"\n{'='*60}")
     print(f"  SAPPHIRE Module Enrichment Analysis")
-    print(f"  目标数据集：{targets}")
+    print(f"  Target datasets: {targets}")
     print(f"{'='*60}")
 
     all_summaries = []
@@ -298,17 +298,17 @@ def main():
         if not summary.empty:
             all_summaries.append(summary)
 
-    # 多数据集时额外生成一个合并总表
+    # Combine summaries across datasets when running all
     if len(all_summaries) > 1:
         combined      = pd.concat(all_summaries, ignore_index=True)
         combined_path = os.path.join(data_dir, "enrichment",
                                      "ALL_datasets_enrichment_summary.csv")
         os.makedirs(os.path.join(data_dir, "enrichment"), exist_ok=True)
         combined.to_csv(combined_path, index=False)
-        print(f"\n  [INFO] 跨数据集总汇总 → {combined_path}")
+        print(f"\n  [INFO] Combined summary across datasets -> {combined_path}")
 
     print(f"\n{'='*60}")
-    print(f"  ✓ 全部完成！")
+    print(f"  All done!")
     print(f"{'='*60}\n")
 
 

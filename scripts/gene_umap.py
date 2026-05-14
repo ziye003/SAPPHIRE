@@ -1,18 +1,19 @@
 """
 gene_umap.py
 ============
-基因 UMAP（方案 A）：
-  - 用基因间 Spearman 相关矩阵做降维（与 SAPPHIRE 网络构建逻辑一致）
-  - 每个点 = 一个基因，颜色 = 所属模块
-  - 4个数据集各出一张图，再出一张 2×2 总览图
+Gene UMAP (Method A):
+  - Dimensionality reduction using gene-gene Spearman correlation matrix
+    (consistent with SAPPHIRE network construction logic)
+  - Each point = one gene, color = module assignment
+  - One plot per dataset + a 2x2 overview figure
 
-用法：
+Usage:
     conda activate liver_adar1_py
     python gene_umap.py
 
-输出（data/umap/）：
-    gene_umap_ALL.png              — 2×2 总览
-    {Dataset}_gene_umap.png        — 每个数据集单独一张（更大更清晰）
+Output (data/umap/):
+    gene_umap_ALL.png              -- 2x2 overview
+    {Dataset}_gene_umap.png        -- individual plot per dataset (larger/clearer)
 """
 
 import os, sys, gc, warnings
@@ -35,7 +36,7 @@ os.makedirs(OUT_DIR, exist_ok=True)
 
 sc.settings.verbosity = 0
 
-# ── 固定颜色方案（最多支持 15 个模块）────────────────────────
+# Fixed color scheme (supports up to 15 modules)
 MODULE_COLORS = [
     "#E63946", "#457B9D", "#2A9D8F", "#E9C46A", "#F4A261",
     "#6A0572", "#1D7874", "#C77DFF", "#4CC9F0", "#F77F00",
@@ -47,21 +48,20 @@ def get_module_color(mod_id, mod_list):
     return MODULE_COLORS[idx % len(MODULE_COLORS)]
 
 
-# ── 计算基因相关矩阵 UMAP ─────────────────────────────────────
 def compute_gene_umap(adata, params):
     """
-    1. Rank transform（和 build_network 完全一致）
-    2. 计算基因×基因 Spearman 相关矩阵
-    3. 转成距离矩阵（1 - |corr|）
-    4. UMAP 降维
-    返回：gene_names list, corr_matrix, umap coords (n_genes x 2)
+    1. Rank transform (identical to build_network)
+    2. Compute gene x gene Spearman correlation matrix
+    3. Convert to distance matrix (1 - |corr|)
+    4. UMAP dimensionality reduction
+    Returns: gene_names list, corr_matrix, umap coords (n_genes x 2)
     """
     X = adata.X
     if ssp.issparse(X):
         X = X.toarray()
 
     n_cells, n_genes = X.shape
-    print(f"  Rank transform ({n_genes} genes × {n_cells} cells)...")
+    print(f"  Rank transform ({n_genes} genes x {n_cells} cells)...")
 
     X_rank = np.zeros_like(X, dtype=np.float32)
     for j in range(n_genes):
@@ -80,7 +80,7 @@ def compute_gene_umap(adata, params):
     np.fill_diagonal(corr, 1)
     del X_rank, Xz; gc.collect()
 
-    # 距离矩阵：1 - |corr|（相关性越高 = 距离越近）
+    # Distance matrix: 1 - |corr| (higher correlation = smaller distance)
     dist = (1 - np.abs(corr)).astype(np.float32)
     dist = np.clip(dist, 0, 1)
 
@@ -99,12 +99,12 @@ def compute_gene_umap(adata, params):
 
 def plot_gene_umap(embedding, gene_names, modules, dataset_name, ax=None, standalone=False):
     """
-    在 ax 上画基因 UMAP，颜色按模块。
-    standalone=True 时创建独立 figure 并保存。
+    Plot gene UMAP on ax, colored by module.
+    If standalone=True, create an independent figure and save it.
     """
     mod_list = sorted(modules.keys())
 
-    # 给每个基因分配模块颜色（不在任何模块的基因 = 灰色）
+    # Assign module color to each gene (genes outside any module -> gray)
     gene_to_mod = {}
     for mod_id, gene_indices in modules.items():
         for gi in gene_indices:
@@ -116,21 +116,21 @@ def plot_gene_umap(embedding, gene_names, modules, dataset_name, ax=None, standa
         if g in gene_to_mod:
             colors.append(get_module_color(gene_to_mod[g], mod_list))
         else:
-            colors.append("#CCCCCC")  # 不在模块内的基因 = 浅灰
+            colors.append("#CCCCCC")  # unassigned genes -> light gray
 
     if standalone:
         fig, ax = plt.subplots(figsize=(9, 8))
         fig.suptitle(f"{dataset_name} — Gene UMAP (colored by module)",
                      fontsize=13, fontweight="bold")
 
-    # 先画灰色（背景）
+    # Draw gray (background) first
     gray_mask = [c == "#CCCCCC" for c in colors]
     ax.scatter(
         embedding[gray_mask, 0], embedding[gray_mask, 1],
         c="#CCCCCC", s=6, alpha=0.4, linewidths=0, rasterized=True, zorder=1
     )
 
-    # 按模块画（前景）
+    # Draw modules (foreground)
     for mod_id in mod_list:
         color = get_module_color(mod_id, mod_list)
         mask  = [gene_to_mod.get(g) == mod_id for g in gene_names]
@@ -148,7 +148,7 @@ def plot_gene_umap(embedding, gene_names, modules, dataset_name, ax=None, standa
     ax.tick_params(labelsize=7)
     ax.grid(False)
 
-    # 图例
+    # Legend
     handles = [
         mpatches.Patch(color=get_module_color(m, mod_list), label=m)
         for m in mod_list
@@ -162,20 +162,20 @@ def plot_gene_umap(embedding, gene_names, modules, dataset_name, ax=None, standa
         out_path = os.path.join(OUT_DIR, f"{dataset_name}_gene_umap.png")
         fig.savefig(out_path, dpi=150, bbox_inches="tight")
         plt.close()
-        print(f"  Saved → {out_path}")
+        print(f"  Saved -> {out_path}")
 
 
 # ════════════════════════════════════════════════════════════════
-# 主流程
+# Main
 # ════════════════════════════════════════════════════════════════
 
 TARGET = ["Cardiomyocyte", "Endoderm", "Kidney", "Neuro"]
 
-# 检查 umap 包是否安装
+# Check umap-learn is installed
 try:
     import umap
 except ImportError:
-    print("[ERROR] 请先安装 umap-learn：")
+    print("[ERROR] Please install umap-learn:")
     print("  conda install -c conda-forge umap-learn")
     raise
 
@@ -188,37 +188,37 @@ for ax_all, ds_name in zip(axes_all, TARGET):
     cfg = DATASETS_CONFIG[ds_name]
     print(f"\n{'='*55}\n  {ds_name}\n{'='*55}")
 
-    # 加载数据 + HVG 筛选（与主 pipeline 一致）
+    # Load data + HVG filtering (consistent with main pipeline)
     adata  = load_and_prepare(ds_name, cfg)
     params = {**SAPPHIRE_PARAMS, **cfg.get("param_overrides", {})}
     if adata.n_vars > params["n_top_genes"]:
         adata = hvg_filter(adata, params["n_top_genes"])
 
-    # 构建网络（拿模块）
+    # Build network (retrieve modules)
     modules, gene_names = build_network(adata, params)
     print(f"  Modules: {len(modules)}  |  Genes: {len(gene_names)}")
 
-    # 计算基因 UMAP
+    # Compute gene UMAP
     gene_names_out, corr, embedding = compute_gene_umap(adata, params)
 
-    # 独立大图
+    # Individual large plot
     plot_gene_umap(embedding, gene_names_out, modules,
                    ds_name, standalone=True)
 
-    # 总览图
+    # Overview panel
     plot_gene_umap(embedding, gene_names_out, modules,
                    ds_name, ax=ax_all, standalone=False)
 
     del adata, corr, embedding; gc.collect()
 
-# 保存总览图
+# Save overview figure
 plt.tight_layout()
 out_all = os.path.join(OUT_DIR, "gene_umap_ALL.png")
 fig_all.savefig(out_all, dpi=150, bbox_inches="tight")
 plt.close()
-print(f"\nSaved overview → {out_all}")
+print(f"\nSaved overview -> {out_all}")
 
 print("\n" + "="*55)
-print("  ✅ Done!")
-print(f"  输出目录：{OUT_DIR}")
+print("  Done!")
+print(f"  Output dir: {OUT_DIR}")
 print("="*55 + "\n")

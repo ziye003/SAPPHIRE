@@ -1,16 +1,16 @@
 """
 gene_umap_B.py
 ==============
-基因 UMAP（方案 B）：
-  - 转置表达矩阵（基因 × 细胞），对基因做 PCA → UMAP
-  - 每个点 = 一个基因，颜色 = 所属模块
-  - 4个数据集各出一张图 + 2×2 总览图
+Gene UMAP (Method B):
+  - Transpose expression matrix (genes x cells), then PCA -> UMAP on genes
+  - Each point = one gene, color = module assignment
+  - One plot per dataset + a 2x2 overview figure
 
-用法：
+Usage:
     conda activate liver_adar1_py
     python gene_umap_B.py
 
-输出（data/umap/）：
+Output (data/umap/):
     gene_umap_B_ALL.png
     {Dataset}_gene_umap_B.png
 """
@@ -32,7 +32,7 @@ exec(open("/Users/ziye/Documents/sapphire_package/sapphire_core.py").read(), glo
 try:
     import umap as umap_lib
 except ImportError:
-    print("[ERROR] 请先安装：conda install -c conda-forge umap-learn")
+    print("[ERROR] Please install: conda install -c conda-forge umap-learn")
     raise
 
 OUT_DIR = os.path.join(str(DATA_ROOT), "umap")
@@ -52,22 +52,22 @@ def get_module_color(mod_id, mod_list):
 
 def compute_gene_umap_B(adata):
     """
-    转置表达矩阵 → 基因×细胞 → PCA（50 PC）→ UMAP
+    Transpose expression matrix -> genes x cells -> PCA (50 PCs) -> UMAP.
     """
     X = adata.X
     if ssp.issparse(X):
         X = X.toarray()
 
     n_cells, n_genes = X.shape
-    print(f"  Transposing ({n_genes} genes × {n_cells} cells)...")
+    print(f"  Transposing ({n_genes} genes x {n_cells} cells)...")
 
-    # 基因标准化（按细胞方向，使每个基因均值0方差1）
+    # Standardize genes (zero mean, unit variance across cells)
     mu  = X.mean(axis=0)
     std = X.std(axis=0) + 1e-10
     Xz  = ((X - mu) / std).T   # shape: (n_genes, n_cells)
 
-    # PCA（用 scanpy，稳定高效）
-    print(f"  PCA on gene×cell matrix...")
+    # PCA via scanpy (stable, efficient)
+    print(f"  PCA on gene x cell matrix...")
     adata_gene = sc.AnnData(X=Xz)
     n_comps = min(50, n_genes - 1, n_cells - 1)
     sc.tl.pca(adata_gene, n_comps=n_comps, random_state=42)
@@ -135,7 +135,7 @@ def plot_gene_umap(embedding, gene_names, modules, dataset_name,
         out_path = os.path.join(OUT_DIR, f"{dataset_name}_gene_umap_B.png")
         fig.savefig(out_path, dpi=150, bbox_inches="tight")
         plt.close()
-        print(f"  Saved → {out_path}")
+        print(f"  Saved -> {out_path}")
 
 
 # ════════════════════════════════════════════════════════════════
@@ -171,5 +171,5 @@ plt.tight_layout()
 out_all = os.path.join(OUT_DIR, "gene_umap_B_ALL.png")
 fig_all.savefig(out_all, dpi=150, bbox_inches="tight")
 plt.close()
-print(f"\nSaved overview → {out_all}")
-print("\n✅ Done!\n")
+print(f"\nSaved overview -> {out_all}")
+print("\nDone!\n")
