@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyc
 *$py.class
 *.so
 .Python
@@ -16,6 +17,7 @@ parts/
 sdist/
 var/
 wheels/
+sapphire_sc.egg-info/
 *.egg-info/
 .installed.cfg
 *.egg
@@ -26,14 +28,25 @@ wheels/
 *.swp
 *.swo
 
-# Data (exclude large files)
-*.h5ad.large
-*_full.h5ad
+# Data
+data/
+*.h5ad
+
+# Images (keep docs/figures/)
+*.png
+!docs/figures/*.png
 
 # Test outputs
 test_results/
 sapphire_test_results/
 *_output/
+
+# Pipeline outputs
+sapphire_validation_v2/
+sapphire_report/
+
+# R artifacts
+Rplots.pdf
 
 # OS
 .DS_Store

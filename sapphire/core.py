@@ -257,8 +257,10 @@ def compute_per_cell_metrics(adata, modules, time_col):
       High entropy = diffuse activation across modules (stem-like).
 
     Network Dispersion:
-      Per-timepoint median cosine distance to population centroid.
-      High dispersion = heterogeneous cell states (early/plastic).
+      Per-cell mean cosine distance to k nearest neighbors (k=30) in
+      module activation space. High dispersion = cell sits in a sparse,
+      locally heterogeneous region = transcriptionally plastic state.
+      Fully label-free: no timepoint information used.
 
     Returns:
       pd.DataFrame with columns: timepoint, pathway_entropy, network_dispersion
@@ -283,18 +285,38 @@ def compute_per_cell_metrics(adata, modules, time_col):
     P       = np.clip(A_abs / row_sum, 1e-10, 1)
     entropy = -(P * np.log2(P)).sum(axis=1)
 
-    # Network dispersion: median cosine distance to timepoint centroid
-    from sklearn.metrics.pairwise import cosine_distances
-    dispersion = np.zeros(n_cells)
-    for tp in adata.obs[time_col].unique():
-        mask = (adata.obs[time_col] == tp).values
-        idx  = np.where(mask)[0]
-        if len(idx) < 2:
-            continue
-        A_tp     = A[idx]
-        centroid = A_tp.mean(axis=0, keepdims=True)
-        dists    = cosine_distances(A_tp, centroid).ravel()
-        dispersion[idx] = np.median(dists)
+    # ── Export module activation matrix (needed for unsupervised dispersion) ──
+    try:
+        _act_df = pd.DataFrame(A, index=adata.obs_names, columns=mod_keys)
+        _ds_name = None
+        for _ds, _cfg in DATASETS_CONFIG.items():
+            _tps = set(adata.obs[time_col].unique())
+            if _cfg["early_tp"] in _tps and _cfg["late_tp"] in _tps:
+                _ds_name = _ds
+                break
+        if _ds_name:
+            _act_dir  = OUTPUT_DIR / _ds_name
+            _act_dir.mkdir(parents=True, exist_ok=True)
+            _act_path = _act_dir / f"{_ds_name}_module_activation.csv"
+            _act_df.to_csv(_act_path)
+            print(f"  Activation matrix saved: {_act_path.name}  shape={_act_df.shape}")
+    except Exception as _e:
+        print(f"  [WARN] Could not save activation matrix: {_e}")
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # Network Dispersion: kNN density (label-free)
+    # Mean cosine distance to k nearest neighbors in module activation space.
+    # High value = cell sits in a sparse region = locally heterogeneous = plastic.
+    # Fully label-free: no timepoint information used at any stage.
+    from sklearn.neighbors import NearestNeighbors
+    from sklearn.preprocessing import normalize as _normalize
+    _KNN_K     = 30
+    _A_norm    = _normalize(A, norm="l2")
+    _nn        = NearestNeighbors(n_neighbors=_KNN_K + 1, metric="cosine",
+                                  algorithm="brute")
+    _nn.fit(_A_norm)
+    _distances, _ = _nn.kneighbors(_A_norm)   # (n_cells, k+1); col 0 = self (dist=0)
+    dispersion = _distances[:, 1:].mean(axis=1)
 
     return pd.DataFrame({
         "timepoint"         : adata.obs[time_col].values,

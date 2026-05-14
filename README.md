@@ -96,44 +96,37 @@ matplotlib >= 3.4
 
 ## Usage
 
-### Notebook (recommended)
+### As a package (recommended)
 
 ```python
-# Step 1: load core
-exec(open("sapphire_core.py").read())
+from sapphire import (
+    load_and_prepare, hvg_filter, build_network,
+    compute_per_cell_metrics, compute_composite,
+    DATASETS_CONFIG, SAPPHIRE_PARAMS,
+)
 
-# Step 2: run main validation
-exec(open("sapphire_validation_all.py").read())
-run_pipeline(dataset="Cardiomyocyte")   # single dataset
-run_pipeline()                           # all four datasets
+cfg   = DATASETS_CONFIG["Cardiomyocyte"]
+adata = load_and_prepare("Cardiomyocyte", cfg)
+adata = hvg_filter(adata, n_top=SAPPHIRE_PARAMS["n_top_genes"])
+modules, genes = build_network(adata, SAPPHIRE_PARAMS)
+pc_df = compute_per_cell_metrics(adata, modules, cfg["time_col"])
+pc_df["composite"] = compute_composite(pc_df)
+```
+
+### Run the full validation pipeline
+
+```bash
+python scripts/run_pipeline.py
 ```
 
 ### Robustness tests
 
-```python
-exec(open("sapphire_core.py").read())
-
-# Hyperparameter sensitivity
-exec(open("hyperparameter_sensitivity.py").read())
-run_hyperparameter_sensitivity()
-
-# Resampling stability
-exec(open("resampling_stability.py").read())
-run_resampling_stability()
-
-# Read-depth control
-exec(open("read_depth_control.py").read())
-run_read_depth_control()
-
-# Method comparison
-exec(open("sapphire_validation_all.py").read())
-exec(open("method_comparison_all.py").read())
-run_method_comparison()
-
-# Holdout-cell validation
-exec(open("sapphire_core.py").read())
-exec(open("holdout_validation.py").read())
-main()
+```bash
+python scripts/hyperparameter_sensitivity.py
+python scripts/resampling_stability.py
+python scripts/read_depth_control.py
+python scripts/method_comparison.py
+python scripts/holdout_validation.py
 ```
 
 ---
@@ -155,7 +148,7 @@ adata.X:    expression matrix (raw counts or log-normalized)
 
 ## Configuration
 
-Edit `DATASETS_CONFIG` in `sapphire_core.py` to add your own dataset:
+Edit `DATASETS_CONFIG` in `sapphire/core.py` to add your own dataset:
 
 ```python
 DATASETS_CONFIG = {
@@ -174,6 +167,7 @@ DATASETS_CONFIG = {
 Default parameters (adjust if needed):
 
 ```python
+# in sapphire/core.py
 SAPPHIRE_PARAMS = {
     "n_top_genes"      : 2000,   # HVGs to select
     "top_k_edges"      : 10,     # max edges per gene
@@ -205,15 +199,26 @@ sapphire_validation_v2/
 
 ```
 SAPPHIRE/
-  sapphire_core.py               # core functions and configuration
-  sapphire_validation_all.py     # main validation pipeline
-  hyperparameter_sensitivity.py  # parameter grid search
-  resampling_stability.py        # 20x 80% subsampling stability test
-  read_depth_control.py          # sequencing depth confound test
-  method_comparison_all.py       # comparison vs CytoTRACE, expression entropy
-  holdout_validation.py          # strict holdout-cell validation (20 splits)
-  generate_report.py             # summary PDF + CSV report
-  run_all.py                     # command-line entry point
+  sapphire/                      # installable Python package
+    __init__.py
+    core.py                      # core functions and configuration
+  scripts/                       # analysis and validation scripts
+    run_pipeline.py              # main validation pipeline
+    hyperparameter_sensitivity.py
+    resampling_stability.py
+    read_depth_control.py
+    method_comparison.py         # comparison vs CytoTRACE, expression entropy
+    holdout_validation.py        # strict holdout-cell validation (20 splits)
+    ablation.py
+    heatmap_pseudopathway.py
+    umap_plots.py
+    enrichment_analysis.py
+    generate_report.py
+    run_all.py
+  docs/
+    figures/                     # publication figures (tracked by git)
+  tests/
+  setup.py
   requirements.txt
   README.md
 ```
@@ -222,17 +227,14 @@ SAPPHIRE/
 
 ## Troubleshooting
 
-**`NameError: load_and_prepare not found`**  
-Run `exec(open("sapphire_core.py").read())` first.
+**`ImportError: No module named 'sapphire'`**  
+Run `pip install -e .` from the repo root.
 
 **Memory error during correlation computation**  
 Reduce `n_top_genes` to 1000–1500 in `SAPPHIRE_PARAMS`.
 
 **No modules detected**  
 Lower `min_corr` to 0.15 or `min_module_size` to 5.
-
-**`__file__` not defined**  
-You are running via `exec()` in a notebook — this is expected and handled automatically.
 
 ---
 
