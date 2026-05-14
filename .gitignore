@@ -48,5 +48,8 @@ sapphire_report/
 # R artifacts
 Rplots.pdf
 
+# Jupyter
+.ipynb_checkpoints/
+
 # OS
 .DS_Store
