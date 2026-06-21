@@ -1,17 +1,16 @@
 """
-sapphire/core.py
-=================
+sapphire_core.py
+================
 SAPPHIRE core module — functions and configuration shared across all pipelines.
 
-This is the importable-package version of the core module (installed via
-`pip install -e .`). The analysis/reproduction scripts under scripts/ use
-their own copy (scripts/sapphire_core.py) loaded via exec(), since they
-predate the packaged API and are kept as standalone, dependency-light
-scripts for exact reproducibility. Both copies are kept in sync; if you
-change one, change the other.
+This is the standalone, exec()-based copy used by every script in scripts/
+(kept dependency-light and self-contained for exact paper reproducibility).
+An identical copy is also installable as a package at sapphire/core.py
+(`pip install -e .`, then `from sapphire.core import ...`). Both copies are
+kept in sync; if you change one, change the other.
 
 Usage:
-    from sapphire.core import (
+    from sapphire_core import (
         DATA_ROOT, OUTPUT_DIR, SAPPHIRE_PARAMS, DATASETS_CONFIG, MAX_CELLS,
         load_and_prepare, build_network,
         compute_per_cell_metrics, compute_composite,

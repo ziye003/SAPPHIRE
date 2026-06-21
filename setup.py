@@ -19,7 +19,7 @@ setup(
     name="sapphire-sc",
     version="1.0.0",
     author="SAPPHIRE Development Team",
-    author_email="yexxx399@umn.edu@umn.edu",
+    author_email="yexxx399@umn.edu",
     description="Single-cell Analysis of Pathway Plasticity via Heterogeneity-Informed Regulatory Entropy",
     long_description=long_description,
     long_description_content_type="text/markdown",

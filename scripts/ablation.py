@@ -8,7 +8,6 @@ Fixes applied:
   2. Network Dispersion violin collapsed to line -> replaced with bar + bootstrap 95% CI
 
 Usage:
-    conda activate liver_adar1_py
     python ablation.py
 """
 
@@ -31,7 +30,11 @@ except ImportError:
 warnings.filterwarnings("ignore")
 
 # ── Path configuration ────────────────────────────────────────────────────────
-DATA_ROOT = "/Users/ziye/Documents/paper/data"
+# Override with: export SAPPHIRE_DATA_ROOT=/path/to/your/data
+DATA_ROOT = os.environ.get(
+    "SAPPHIRE_DATA_ROOT",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
+)
 VAL_DIR   = os.path.join(DATA_ROOT, "sapphire_validation_v2")
 OUT_DIR   = os.path.join(DATA_ROOT, "ablation")
 os.makedirs(OUT_DIR, exist_ok=True)

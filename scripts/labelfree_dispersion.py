@@ -29,8 +29,17 @@ from sklearn.neighbors import NearestNeighbors
 # ─────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────
-VAL_DIR = Path("/Users/ziye/Documents/paper/data/sapphire_validation_v2")
-OUT_DIR = Path("/Users/ziye/Documents/paper/data/labelfree_dispersion")
+# ─────────────────────────────────────────────
+# CONFIG
+# ─────────────────────────────────────────────
+import os
+# Override with: export SAPPHIRE_DATA_ROOT=/path/to/your/data
+_DATA_ROOT = Path(os.environ.get(
+    "SAPPHIRE_DATA_ROOT",
+    Path(__file__).resolve().parent.parent / "data"
+))
+VAL_DIR = _DATA_ROOT / "sapphire_validation_v2"
+OUT_DIR = _DATA_ROOT / "labelfree_dispersion"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 DATASETS = ["Cardiomyocyte", "Endoderm", "Kidney", "Neuro"]

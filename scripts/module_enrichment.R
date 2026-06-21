@@ -1,6 +1,6 @@
 # Module enrichment in R
-# ALS May 5, 2026
-# Updated: run all 4 datasets, save plots automatically
+# Runs GO Biological Process enrichment per module for all 4 datasets,
+# saves dotplots and results tables automatically.
 
 library(tidyverse)
 library(clusterProfiler)

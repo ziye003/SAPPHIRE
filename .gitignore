@@ -53,3 +53,6 @@ Rplots.pdf
 
 # OS
 .DS_Store
+
+# Local tool settings (machine-specific, not for public repo)
+.claude/

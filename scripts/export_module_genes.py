@@ -26,7 +26,11 @@ _jupyter = any("jupyter" in a or "ipykernel" in a for a in sys.argv)
 parser = argparse.ArgumentParser(description="SAPPHIRE: Export module gene lists")
 parser.add_argument("--dataset", default="Cardiomyocyte",
                     help="Dataset name, or 'all' for all (Cardiomyocyte/Endoderm/Kidney/Neuro)")
-parser.add_argument("--data_dir", default="/Users/ziye/Documents/paper/data",
+parser.add_argument("--data_dir",
+                    default=os.environ.get(
+                        "SAPPHIRE_DATA_ROOT",
+                        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
+                    ),
                     help="Root data directory")
 args = parser.parse_args([] if _jupyter else None)
 

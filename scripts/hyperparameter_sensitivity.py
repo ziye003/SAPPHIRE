@@ -215,3 +215,6 @@ def run_hyperparameter_sensitivity():
 
 
 print("hyperparameter_sensitivity.py loaded  ->  run_hyperparameter_sensitivity()")
+
+if __name__ == "__main__":
+    run_hyperparameter_sensitivity()

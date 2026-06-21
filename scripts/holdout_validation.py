@@ -2,36 +2,41 @@
 holdout_validation.py
 =====================
 Strict holdout-cell validation for SAPPHIRE.
- sapphire_core.py 
 
-
-----
- dataset20 split timepoint 80/20
+Unlike the main pipeline (which computes per-cell metrics on the full
+dataset and only withholds timepoint labels from the network-construction
+step), this script performs a genuine 80/20 cell-level holdout per
+dataset, repeated over N_SPLITS random splits:
 
   Construction set (80%):
-    1. hvg_filter_subset()  —  top N genes core.hvg_filter
-    2. build_network_from_array()  — Spearman rank corr + greedy modularity
-        core.build_network
-    3. compute_centroids()  —  timepoint  centroid
+    1. hvg_filter_subset()       -- top-N HVG selection (mirrors core.hvg_filter)
+    2. build_network_from_array() -- Spearman rank correlation + greedy
+                                      modularity communities (mirrors
+                                      core.build_network)
+    3. compute_centroids()       -- per-timepoint centroid of module
+                                     activation, computed only on the
+                                     construction set
 
   Holdout set (20%):
-    4.  modules +  centroids 
-       - Pathway Entropyper cell core.compute_per_cell_metrics
-       - Network Dispersionper cell centroidmedian within-tp
-       - Compositerank  core.compute_composite
+    4. Module activations for holdout cells are computed using the
+       modules and HVG selection learned on the construction set only
+       (the holdout cells never influence network construction):
+       - Pathway Entropy   -- per cell (mirrors core.compute_per_cell_metrics)
+       - Network Dispersion -- per holdout cell, cosine distance to its
+         timepoint's FIXED construction-set centroid (median within timepoint)
+       - Composite         -- rank average of the two (mirrors core.compute_composite)
 
-normalize 
+Normalization
 --------------
-   sapphire_core.DATASETS_CONFIG  already_log1p 
-  - False → normalize_total + log1p load_and_prepare 
-  - True  →  normalizeNeuro
-  
+Uses sapphire_core.DATASETS_CONFIG's "already_log1p" flag per dataset:
+  - False -> normalize_total + log1p applied in load_and_prepare()
+  - True  -> data is already normalized (e.g. Neuro)
 
-
-----
-  holdout_{dataset}_raw.csv  —  split  dataset 
-  holdout_all_splits.csv     —  dataset
-  holdout_summary.csv        — mean ± std / min / max dataset
+Output
+------
+  holdout_{dataset}_raw.csv  -- per-split metrics for one dataset
+  holdout_all_splits.csv     -- per-split metrics across all datasets
+  holdout_summary.csv        -- mean +/- std / min / max per dataset
 """
 
 import gc
@@ -49,33 +54,34 @@ from scipy.stats import rankdata, spearmanr
 
 warnings.filterwarnings("ignore")
 
-# ──  exec()  resampling_stability.py────────────
+# Auto-load core functions (same pattern as resampling_stability.py)
 import os
 _here = os.path.dirname(os.path.abspath(__file__)) if "__file__" in dir() else "."
 if "load_and_prepare" not in dir():
-    print("  →  sapphire_core.py...")
+    print("  -> Auto-loading sapphire_core.py...")
     exec(open(os.path.join(_here, "sapphire_core.py")).read(), globals())
-#  exec(sapphire_core) DATASETS_CONFIG / SAPPHIRE_PARAMS  globals() 
+# exec() above also brings DATASETS_CONFIG / SAPPHIRE_PARAMS / DATA_ROOT into globals()
 
 N_SPLITS    = 20
 TEST_SIZE   = 0.20
 RANDOM_SEED = 42
 
-OUTPUT_DIR = Path("/Users/ziye/Documents/paper/data/sapphire_validation_v2")
+# Override with: export SAPPHIRE_DATA_ROOT=/path/to/your/data
+OUTPUT_DIR = DATA_ROOT / "sapphire_validation_v2"
 OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  log1p 
+# log1p sanity check
 # ──────────────────────────────────────────────────────────────────────────────
 
 def check_log1p_status(adata, n_sample: int = 1000):
     """
-     log1p
-    
-      - max_val < 20  frac_integer < 0.5  →  log1p
-      - frac_integer > 0.8                  →  raw counts
-      -                                 → 
+    Heuristic check for whether adata.X looks log1p-normalized or raw counts,
+    based on a random sample of values:
+      - max_val < 20 and frac_integer < 0.5  -> likely log1p
+      - frac_integer > 0.8                   -> likely raw counts
+      - otherwise                            -> uncertain, verify manually
     """
     X   = adata.X
     idx = np.random.choice(adata.n_obs, min(n_sample, adata.n_obs), replace=False)
@@ -98,18 +104,21 @@ def check_log1p_status(adata, n_sample: int = 1000):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# HVG  sapphire_core.hvg_filter
+# HVG selection -- mirrors sapphire_core.hvg_filter
 # ──────────────────────────────────────────────────────────────────────────────
 
 def hvg_filter_subset(X_dense: np.ndarray, gene_names: list, n_top: int):
     """
-     top n_top 
-     sapphire_core.hvg_filter scanpy HVG pipeline
+    Select the top n_top genes by variance, operating on a dense array
+    (mirrors sapphire_core.hvg_filter's variance-based scanpy HVG selection,
+    but works directly on a numpy array rather than an AnnData object so it
+    can be applied separately to the construction-set subset).
 
-    :
-        X_filt     — (n_cells, n_top) dense array
-        genes_filt — list of gene names
-        sel_idx    — np.ndarray of selected column indices holdout 
+    Returns:
+        X_filt     -- (n_cells, n_top) dense array
+        genes_filt -- list of gene names
+        sel_idx    -- np.ndarray of selected column indices, reused to
+                      subset the holdout set with the same gene selection
     """
     if X_dense.shape[1] <= n_top:
         return X_dense, gene_names, np.arange(X_dense.shape[1])
@@ -124,21 +133,22 @@ def hvg_filter_subset(X_dense: np.ndarray, gene_names: list, n_top: int):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  sapphire_core.build_network
+# Network construction -- mirrors sapphire_core.build_network
 # ──────────────────────────────────────────────────────────────────────────────
 
 def build_network_from_array(X: np.ndarray, params: dict):
     """
-    Spearman rank correlation → edge list → greedy modularity communities
-     sapphire_core.build_network
+    Spearman rank correlation -> edge list -> greedy modularity communities.
+    Mirrors sapphire_core.build_network, operating on a plain numpy array
+    (the construction-set subset) instead of an AnnData object.
 
-    :
-        X      — (n_cells, n_genes) dense float array HVG
-        params — SAPPHIRE_PARAMS
+    Args:
+        X      -- (n_cells, n_genes) dense float array, already HVG-filtered
+        params -- SAPPHIRE_PARAMS dict
 
-    :
-        modules — dict {module_id: [gene_col_indices]}
-        n_edges — int
+    Returns:
+        modules -- dict {module_id: [gene_col_indices]}
+        n_edges -- int, total number of edges retained
     """
     n_cells, n_genes = X.shape
     top_k  = params["top_k_edges"]
@@ -151,7 +161,7 @@ def build_network_from_array(X: np.ndarray, params: dict):
     for j in range(n_genes):
         X_rank[:, j] = rankdata(X[:, j])
 
-    #  Pearson on ranks = Spearman
+    # Pearson correlation on ranks is equivalent to Spearman correlation
     mu  = X_rank.mean(axis=0)
     std = X_rank.std(axis=0) + 1e-10
     Xz  = (X_rank - mu) / std / np.sqrt(n_cells)
@@ -166,7 +176,7 @@ def build_network_from_array(X: np.ndarray, params: dict):
     del X_rank, Xz
     gc.collect()
 
-    #  edge listtop_k  + min_corr 
+    # Build edge list: keep top_k strongest partners per gene, above min_corr
     edges = []
     for i in range(n_genes):
         row       = np.abs(corr[i]).copy()
@@ -193,13 +203,13 @@ def build_network_from_array(X: np.ndarray, params: dict):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Metric helpers sapphire_core.compute_per_cell_metrics
+# Metric helpers -- mirror sapphire_core.compute_per_cell_metrics
 # ──────────────────────────────────────────────────────────────────────────────
 
 def module_activation_matrix(X: np.ndarray, modules: dict) -> np.ndarray:
     """
-    cells × modules 
-     core: A[:, k] = X[:, module_genes].mean(axis=1)
+    Build the cells x modules activation matrix.
+    Mirrors core: A[:, k] = X[:, module_genes].mean(axis=1)
     """
     mod_keys = list(modules.keys())
     A = np.zeros((X.shape[0], len(mod_keys)), dtype=np.float32)
@@ -212,7 +222,8 @@ def module_activation_matrix(X: np.ndarray, modules: dict) -> np.ndarray:
 
 def pathway_entropy_from_A(A: np.ndarray) -> np.ndarray:
     """
-     coreP = |A| / row_sumShannon entropy (log2)
+    Per-cell Shannon entropy (log2) of P = |A| / row_sum(|A|).
+    Mirrors core's pathway entropy calculation.
     """
     A_abs   = np.abs(A)
     row_sum = A_abs.sum(axis=1, keepdims=True)
@@ -223,8 +234,9 @@ def pathway_entropy_from_A(A: np.ndarray) -> np.ndarray:
 
 def compute_centroids(A: np.ndarray, tp_labels: np.ndarray) -> dict:
     """
-     construction set  timepoint  A  centroid
-    : {timepoint: np.ndarray (n_modules,)}
+    Per-timepoint centroid of module activation A, computed only on the
+    construction set.
+    Returns: {timepoint: np.ndarray (n_modules,)}
     """
     return {
         tp: A[tp_labels == tp].mean(axis=0)
@@ -238,11 +250,13 @@ def dispersion_fixed_centroids(
     fixed_centroids: dict,
 ) -> np.ndarray:
     """
-    Holdout dispersion cell  timepoint FIXED centroid  cosine distance
-     core cell  timepoint  median 
+    Holdout dispersion: for each holdout cell, the cosine distance to its
+    timepoint's FIXED centroid (computed only on the construction set; the
+    "median" below mirrors core's per-timepoint-median dispersion estimate).
 
-     fixed centroid construction set
-    holdout cells  centroid 
+    Unlike sapphire_core's main per-cell dispersion (computed via kNN within
+    the full dataset), this version uses a centroid that holdout cells
+    cannot influence -- a stricter, leakage-free dispersion estimate.
     """
     dispersion = np.zeros(A.shape[0])
     for tp in np.unique(tp_labels):
@@ -253,17 +267,17 @@ def dispersion_fixed_centroids(
         A_tp     = A[idx]
         centroid = fixed_centroids[tp].reshape(1, -1)
         dists    = cosine_distances(A_tp, centroid).ravel()
-        dispersion[idx] = np.median(dists)    #  core
+        dispersion[idx] = np.median(dists)    # matches core's aggregation
     return dispersion
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# AUC & Spearman sapphire_core.compute_auc
+# AUC & Spearman -- mirror sapphire_core.compute_auc
 # ──────────────────────────────────────────────────────────────────────────────
 
 def compute_auc(scores: np.ndarray, tp_labels: np.ndarray,
                 early_tp: str, late_tp: str) -> float:
-    """ coremax(auc, 1-auc) 10"""
+    """Mirrors core's max(auc, 1-auc) convention; requires >= 10 cells."""
     mask = np.isin(tp_labels, [early_tp, late_tp])
     if mask.sum() < 10:
         return np.nan
@@ -289,16 +303,17 @@ def compute_spearman_rho(scores: np.ndarray, tp_labels: np.ndarray,
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  split
+# One holdout split
 # ──────────────────────────────────────────────────────────────────────────────
 
 def run_one_split(X_full: np.ndarray, gene_names: list,
                   tp_labels: np.ndarray, cfg: dict,
                   params: dict, split_seed: int) -> dict:
     """
-     80/20 holdout split
+    Run a single 80/20 holdout split.
 
-    X_full, gene_names, tp_labels —  adata normalize
+    X_full, gene_names, tp_labels come from an already-loaded and
+    normalized AnnData object (see load_and_prepare in sapphire_core.py).
     """
     early_tp = cfg["early_tp"]
     late_tp  = cfg["late_tp"]
@@ -330,14 +345,14 @@ def run_one_split(X_full: np.ndarray, gene_names: list,
     A_train         = module_activation_matrix(X_tr_filt, modules)
     fixed_centroids = compute_centroids(A_train, tp_train)
 
-    # ── Holdout:  HVG  ────────────────────────────────────────────
+    # ── Holdout set: apply the same HVG selection learned on the construction set ──
     X_ho_filt = X_holdout[:, sel_idx]
     A_holdout = module_activation_matrix(X_ho_filt, modules)
 
     entropy    = pathway_entropy_from_A(A_holdout)
     dispersion = dispersion_fixed_centroids(A_holdout, tp_hold, fixed_centroids)
 
-    # Compositerank  core.compute_composite
+    # Composite: rank average, mirrors core.compute_composite
     n      = len(entropy)
     r_ent  = rankdata(entropy)   / n
     r_disp = rankdata(dispersion) / n
@@ -359,7 +374,7 @@ def run_one_split(X_full: np.ndarray, gene_names: list,
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  dataset  N_SPLITS 
+# Run N_SPLITS holdout splits for one dataset
 # ──────────────────────────────────────────────────────────────────────────────
 
 def run_dataset(name: str, cfg: dict, params: dict) -> pd.DataFrame:
@@ -367,14 +382,14 @@ def run_dataset(name: str, cfg: dict, params: dict) -> pd.DataFrame:
     print(f"  Dataset: {name}")
     print(f"{'='*62}")
 
-    # load_and_prepare  already_log1p  normalize
+    # load_and_prepare() handles normalization based on cfg["already_log1p"]
     adata = load_and_prepare(name, cfg, max_cells=MAX_CELLS)
-    check_log1p_status(adata)   # 
+    check_log1p_status(adata)   # sanity check only, does not affect results
 
-    # apply dataset-level param overrides EB  min_corr
+    # Apply dataset-level param overrides (e.g. EB's lower min_corr)
     p = {**params, **cfg.get("param_overrides", {})}
 
-    #  dense  split 
+    # Convert to a dense array once, then split
     X_full = adata.X
     if sp.issparse(X_full):
         X_full = X_full.toarray()
@@ -463,7 +478,7 @@ def print_summary(summary: pd.DataFrame):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def main():
-    # EB NaN corruption 4 
+    # EB is excluded: known NaN corruption affecting 4 marker genes
     datasets_to_run = [k for k in DATASETS_CONFIG if k != "EB"]
 
     all_results = []
@@ -476,7 +491,7 @@ def main():
         df_ds = run_dataset(name, cfg, SAPPHIRE_PARAMS)
         all_results.append(df_ds)
 
-        #  dataset 
+        # Save per-dataset raw results immediately
         out_path = OUTPUT_DIR / f"holdout_{name}_raw.csv"
         df_ds.to_csv(out_path, index=False)
         print(f"  → saved: {out_path.name}")

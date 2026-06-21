@@ -9,7 +9,6 @@ Transposed pseudo-pathway heatmap:
       2. Ordered by composite score (high -> low)
 
 Usage:
-    conda activate liver_adar1_py
     python heatmap_pseudopathway.py
 
 Output (data/heatmap/):
@@ -28,8 +27,8 @@ import matplotlib.patches as mpatches
 import matplotlib.gridspec as gridspec
 warnings.filterwarnings("ignore")
 
-sys.path.insert(0, "/Users/ziye/Documents/sapphire_package/")
-exec(open("/Users/ziye/Documents/sapphire_package/sapphire_core.py").read(), globals())
+_here = os.path.dirname(os.path.abspath(__file__)) if "__file__" in dir() else "."
+exec(open(os.path.join(_here, "sapphire_core.py")).read(), globals())
 
 VAL_DIR = os.path.join(str(DATA_ROOT), "sapphire_validation_v2")
 OUT_DIR = os.path.join(str(DATA_ROOT), "heatmap")

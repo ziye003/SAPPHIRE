@@ -13,7 +13,13 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from pathlib import Path
 
-DATA_ROOT  = Path("/Users/ziye/Documents/paper/data")
+import os
+
+# Override with: export SAPPHIRE_DATA_ROOT=/path/to/your/data
+DATA_ROOT  = Path(os.environ.get(
+    "SAPPHIRE_DATA_ROOT",
+    Path(__file__).resolve().parent.parent / "data"
+))
 VAL_DIR    = DATA_ROOT / "sapphire_validation_v2"
 REPORT_DIR = DATA_ROOT / "sapphire_report"
 REPORT_DIR.mkdir(exist_ok=True, parents=True)

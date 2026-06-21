@@ -10,8 +10,7 @@ Output (data/umap_overlay/):
   4. ALL_umap_module_overlay.png           -- key module per dataset, 2x2 overview
 
 Usage:
-    conda activate liver_adar1_py
-    cd /Users/ziye/Documents/sapphire_package/
+    cd SAPPHIRE/scripts
     python umap_with_module_overlay.py
 """
 
@@ -29,8 +28,8 @@ from matplotlib.gridspec import GridSpec
 warnings.filterwarnings("ignore")
 
 # Load core
-sys.path.insert(0, "/Users/ziye/Documents/sapphire_package/")
-exec(open("/Users/ziye/Documents/sapphire_package/sapphire_core_v2.py").read(), globals())
+_here = os.path.dirname(os.path.abspath(__file__)) if "__file__" in dir() else "."
+exec(open(os.path.join(_here, "sapphire_core.py")).read(), globals())
 
 VAL_DIR = os.path.join(str(DATA_ROOT), "sapphire_validation_v2")
 OUT_DIR = os.path.join(str(DATA_ROOT), "umap_overlay")
@@ -99,51 +98,60 @@ def scatter_ax(ax, x, y, c, cmap, vmin, vmax, s=3, alpha=0.6, title="", xlabel=T
 
 # ════════════════════════════════════════════════════════════════
 # Figure 1: Timepoint UMAP — 4 datasets, 2x2
+#
+# NOTE: Disabled by default. This panel duplicates the "Timepoint"
+# column already produced as panel 0 of each {Dataset}_umap_sapphire_scores.png
+# below (advisor feedback: do not repeat the same image across figures,
+# e.g. old Fig 1A = old Fig 2A). Set RUN_FIGURE_1 = True to regenerate the
+# standalone 2x2 timepoint-only overview if needed elsewhere.
 # ════════════════════════════════════════════════════════════════
-print("\n" + "="*60)
-print("  Figure 1: Timepoint UMAP (all 4 datasets)")
-print("="*60)
+RUN_FIGURE_1 = False
 
-fig, axes = plt.subplots(2, 2, figsize=(14, 12))
-fig.suptitle("SAPPHIRE — Cell UMAP Coloured by Timepoint",
-             fontsize=14, fontweight="bold")
-axes = axes.ravel()
+if RUN_FIGURE_1:
+    print("\n" + "="*60)
+    print("  Figure 1: Timepoint UMAP (all 4 datasets)")
+    print("="*60)
 
-for ax, ds_name in zip(axes, TARGET):
-    cfg      = DATASETS_CONFIG[ds_name]
-    time_col = cfg["time_col"]
-    print(f"\n  {ds_name}")
+    fig, axes = plt.subplots(2, 2, figsize=(14, 12))
+    fig.suptitle("SAPPHIRE — Cell UMAP Coloured by Timepoint",
+                 fontsize=14, fontweight="bold")
+    axes = axes.ravel()
 
-    adata  = load_and_prepare(ds_name, cfg)
-    if adata.n_vars > SAPPHIRE_PARAMS["n_top_genes"]:
-        adata = hvg_filter(adata, SAPPHIRE_PARAMS["n_top_genes"])
-    adata  = get_umap(adata)
-    u1, u2 = adata.obsm["X_umap"][:, 0], adata.obsm["X_umap"][:, 1]
-    tps    = sorted(adata.obs[time_col].unique(), key=sort_tp)
-    pal    = tp_palette(tps)
+    for ax, ds_name in zip(axes, TARGET):
+        cfg      = DATASETS_CONFIG[ds_name]
+        time_col = cfg["time_col"]
+        print(f"\n  {ds_name}")
 
-    for tp in tps:
-        mask = (adata.obs[time_col] == tp).values
-        ax.scatter(u1[mask], u2[mask], c=[pal[tp]], s=3, alpha=0.5,
-                   linewidths=0, rasterized=True)
+        adata  = load_and_prepare(ds_name, cfg)
+        if adata.n_vars > SAPPHIRE_PARAMS["n_top_genes"]:
+            adata = hvg_filter(adata, SAPPHIRE_PARAMS["n_top_genes"])
+        adata  = get_umap(adata)
+        u1, u2 = adata.obsm["X_umap"][:, 0], adata.obsm["X_umap"][:, 1]
+        tps    = sorted(adata.obs[time_col].unique(), key=sort_tp)
+        pal    = tp_palette(tps)
 
-    handles = [mpatches.Patch(color=pal[tp], label=tp) for tp in tps]
-    ax.legend(handles=handles, title="Timepoint", fontsize=7,
-              title_fontsize=8, loc="best", framealpha=0.8)
-    ax.set_title(ds_name, fontsize=12, fontweight="bold")
-    ax.set_xlabel("UMAP 1", fontsize=9)
-    ax.set_ylabel("UMAP 2", fontsize=9)
-    ax.tick_params(labelsize=7)
-    ax.grid(False)
-    ax.set_aspect("equal", adjustable="datalim")
+        for tp in tps:
+            mask = (adata.obs[time_col] == tp).values
+            ax.scatter(u1[mask], u2[mask], c=[pal[tp]], s=3, alpha=0.5,
+                       linewidths=0, rasterized=True)
 
-    del adata; gc.collect()
+        handles = [mpatches.Patch(color=pal[tp], label=tp) for tp in tps]
+        ax.legend(handles=handles, title="Timepoint", fontsize=7,
+                  title_fontsize=8, loc="best", framealpha=0.8)
+        ax.set_title(ds_name, fontsize=12, fontweight="bold")
+        ax.set_xlabel("UMAP 1", fontsize=9)
+        ax.set_ylabel("UMAP 2", fontsize=9)
+        ax.tick_params(labelsize=7)
+        ax.grid(False)
+        ax.set_aspect("equal", adjustable="datalim")
 
-plt.tight_layout()
-out = os.path.join(OUT_DIR, "ALL_datasets_umap_timepoint.png")
-fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
-plt.close()
-print(f"\n  -> {out}")
+        del adata; gc.collect()
+
+    plt.tight_layout()
+    out = os.path.join(OUT_DIR, "ALL_datasets_umap_timepoint.png")
+    fig.savefig(out, dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close()
+    print(f"\n  -> {out}")
 
 
 # ════════════════════════════════════════════════════════════════
@@ -342,10 +350,27 @@ fig.suptitle(
     "Left: timepoint identity  |  Right: key module activation score",
     fontsize=13, fontweight="bold")
 
-for row, ds_name in enumerate(["Cardiomyocyte", "Endoderm"]):
+# Explicit (row, timepoint_col, module_col) assignment for each dataset.
+# FIX: the previous version used conditional indexing (axes[0 if ... else 1, ...])
+# separately in two loops. Endoderm's module panel landed on axes[1,3], which the
+# second loop (Kidney/Neuro) never touched, but Kidney's panels at axes[0,0]/[0,1]
+# and Neuro's at axes[1,0]/[1,1] silently overwrote Cardiomyocyte's panels at the
+# same coordinates, and axes[0,2]/[0,3] (meant for Endoderm) were partially never
+# drawn into because Endoderm's timepoint panel used axes[0,2] but nothing wrote
+# axes[1,2]. Net effect: two of the eight panels rendered blank. Explicit per-dataset
+# layout below guarantees every one of the 8 axes is written to exactly once.
+PANEL_LAYOUT = {
+    "Cardiomyocyte": (0, 0, 1),
+    "Endoderm":      (0, 2, 3),
+    "Kidney":        (1, 0, 1),
+    "Neuro":         (1, 2, 3),
+}
+
+for ds_name in ["Cardiomyocyte", "Endoderm", "Kidney", "Neuro"]:
     cfg      = DATASETS_CONFIG[ds_name]
     time_col = cfg["time_col"]
     mod_id, cmap_name, mod_title = HIGHLIGHT[ds_name]
+    row, tp_col, mod_col = PANEL_LAYOUT[ds_name]
     print(f"\n  {ds_name}")
 
     adata  = load_and_prepare(ds_name, cfg)
@@ -364,8 +389,7 @@ for row, ds_name in enumerate(["Cardiomyocyte", "Endoderm"]):
     pal = tp_palette(tps)
 
     # Timepoint panel
-    ax_col = 0 if ds_name == "Cardiomyocyte" else 2
-    ax = axes[0 if ds_name=="Cardiomyocyte" else 1, ax_col]
+    ax = axes[row, tp_col]
     for tp in tps:
         mask = (adata.obs[time_col] == tp).values
         ax.scatter(u1[mask], u2[mask], c=[pal[tp]], s=3, alpha=0.55,
@@ -379,56 +403,7 @@ for row, ds_name in enumerate(["Cardiomyocyte", "Endoderm"]):
     ax.set_aspect("equal", adjustable="datalim")
 
     # Module activation panel
-    r = 0 if ds_name == "Cardiomyocyte" else 1
-    c = 1 if ds_name == "Cardiomyocyte" else 3
-    ax2 = axes[r, c]
-    vmin, vmax = np.percentile(mod_vals, 2), np.percentile(mod_vals, 98)
-    sc_plot = ax2.scatter(u1, u2, c=mod_vals, cmap=cmap_name,
-                          vmin=vmin, vmax=vmax, s=3, alpha=0.65,
-                          linewidths=0, rasterized=True)
-    plt.colorbar(sc_plot, ax=ax2, shrink=0.75, pad=0.02, label="Activation")
-    ax2.set_title(f"{ds_name}\n{mod_title}", fontsize=10, fontweight="bold")
-    ax2.set_xlabel("UMAP 1", fontsize=8)
-    ax2.tick_params(labelsize=6); ax2.grid(False)
-    ax2.set_aspect("equal", adjustable="datalim")
-
-    del adata, modules; gc.collect()
-
-for row, ds_name in enumerate(["Kidney", "Neuro"]):
-    cfg      = DATASETS_CONFIG[ds_name]
-    time_col = cfg["time_col"]
-    mod_id, cmap_name, mod_title = HIGHLIGHT[ds_name]
-    print(f"\n  {ds_name}")
-
-    adata  = load_and_prepare(ds_name, cfg)
-    if adata.n_vars > SAPPHIRE_PARAMS["n_top_genes"]:
-        adata = hvg_filter(adata, SAPPHIRE_PARAMS["n_top_genes"])
-    params = {**SAPPHIRE_PARAMS, **cfg.get("param_overrides", {})}
-    modules, _ = build_network(adata, params)
-    adata = get_umap(adata)
-    u1, u2 = adata.obsm["X_umap"][:, 0], adata.obsm["X_umap"][:, 1]
-
-    X = adata.X.toarray() if ssp.issparse(adata.X) else adata.X
-    gene_idx = modules.get(mod_id, [])
-    mod_vals = X[:, gene_idx].mean(axis=1) if len(gene_idx) > 0 else np.zeros(len(u1))
-
-    tps = sorted(adata.obs[time_col].unique(), key=sort_tp)
-    pal = tp_palette(tps)
-
-    ax = axes[row, 0]
-    for tp in tps:
-        mask = (adata.obs[time_col] == tp).values
-        ax.scatter(u1[mask], u2[mask], c=[pal[tp]], s=3, alpha=0.55,
-                   linewidths=0, rasterized=True)
-    handles = [mpatches.Patch(color=pal[tp], label=tp) for tp in tps]
-    ax.legend(handles=handles, title="Timepoint", fontsize=6.5,
-              title_fontsize=7, loc="best", framealpha=0.8)
-    ax.set_title(f"{ds_name}\nTimepoint", fontsize=10, fontweight="bold")
-    ax.set_xlabel("UMAP 1", fontsize=8); ax.set_ylabel("UMAP 2", fontsize=8)
-    ax.tick_params(labelsize=6); ax.grid(False)
-    ax.set_aspect("equal", adjustable="datalim")
-
-    ax2 = axes[row, 1]
+    ax2 = axes[row, mod_col]
     vmin, vmax = np.percentile(mod_vals, 2), np.percentile(mod_vals, 98)
     sc_plot = ax2.scatter(u1, u2, c=mod_vals, cmap=cmap_name,
                           vmin=vmin, vmax=vmax, s=3, alpha=0.65,

@@ -54,7 +54,11 @@ _jupyter = any("jupyter" in a or "ipykernel" in a for a in sys.argv)
 parser = argparse.ArgumentParser(description="SAPPHIRE Module Enrichment Analysis")
 parser.add_argument("--dataset",  default="cardiomyocyte",
                     help="Dataset name, or 'all' to run all datasets")
-parser.add_argument("--data_dir", default="/Users/ziye/Documents/paper/data",
+parser.add_argument("--data_dir",
+                    default=os.environ.get(
+                        "SAPPHIRE_DATA_ROOT",
+                        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
+                    ),
                     help="Root data directory")
 parser.add_argument("--top_n",   type=int, default=5,
                     help="Top N terms to show per module in bubble plot")

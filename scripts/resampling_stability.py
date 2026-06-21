@@ -230,3 +230,6 @@ def run_resampling_stability():
 
 
 print("resampling_stability.py loaded  ->  run_resampling_stability()")
+
+if __name__ == "__main__":
+    run_resampling_stability()

@@ -321,3 +321,6 @@ def run_read_depth_control():
 
 
 print("read_depth_control.py loaded  ->  run_read_depth_control()")
+
+if __name__ == "__main__":
+    run_read_depth_control()

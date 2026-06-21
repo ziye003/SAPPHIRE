@@ -1,14 +1,13 @@
 """
-sapphire_validation_all.py
-===========================
-Main SAPPHIRE validation pipeline across all datasets.
-All core functions are imported from sapphire_core.py.
+SAPPHIRE Validation Pipeline
+=============================
+All core functions come from sapphire_core.py.
 
 Usage (notebook):
     exec(open("sapphire_core.py").read())
     exec(open("sapphire_validation_all.py").read())
     run_pipeline(dataset="Endoderm")   # single dataset
-    run_pipeline()                      # all four datasets (EB excluded automatically)
+    run_pipeline()                      # all four (automatically skips EB)
 """
 
 import gc
@@ -20,7 +19,7 @@ matplotlib.use("Agg")
 warnings.filterwarnings("ignore")
 from pathlib import Path
 
-# Auto-load core if not already loaded
+# ── Auto-load core (if not already loaded) ──────────────────────────
 import os
 _here = os.path.dirname(os.path.abspath(__file__)) if "__file__" in dir() else "."
 _core_path = os.path.join(_here, "sapphire_core.py")
@@ -37,12 +36,14 @@ def run_one(name, cfg):
     out_dir = _VAL_OUTPUT / name
     out_dir.mkdir(exist_ok=True, parents=True)
 
-    adata    = load_and_prepare(name, cfg)
-    time_col = cfg["time_col"]
+    adata_full = load_and_prepare(name, cfg)
+    time_col   = cfg["time_col"]
 
     params = {**SAPPHIRE_PARAMS, **cfg.get("param_overrides", {})}
-    if adata.n_vars > params.get("n_top_genes", 2000):
-        adata = hvg_filter(adata, params["n_top_genes"])
+    if adata_full.n_vars > params.get("n_top_genes", 2000):
+        adata = hvg_filter(adata_full, params["n_top_genes"])
+    else:
+        adata = adata_full
 
     modules, _ = build_network(adata, params)
 
@@ -60,8 +61,15 @@ def run_one(name, cfg):
     print(f"    composite  AUC = {auc_comp:.3f}")
 
     print("  Marker correlation:")
+    # FIX: use adata_full (pre-HVG-filter), not the HVG-2000-filtered adata.
+    # Curated marker genes (e.g. POU5F1, SOX2, PAX2, LHX1, WT1) are identity
+    # markers, not necessarily high-variance genes -- in Kidney specifically,
+    # none of the 5 configured markers survived the HVG-2000 variance cutoff,
+    # which silently produced NaN correlations even though every marker gene
+    # is present in the dataset. Scoring against the full normalized gene
+    # panel avoids this HVG-selection artifact.
     marker_r = compute_marker_corr(
-        adata, pc_df, cfg["stem_markers"], cfg["diff_markers"]
+        adata_full, pc_df, cfg["stem_markers"], cfg["diff_markers"]
     )
 
     print("  Shuffle-time null test (n=50):")
@@ -91,10 +99,7 @@ def run_one(name, cfg):
 
 
 def run_pipeline(dataset=None):
-    """
-    Run the full SAPPHIRE validation pipeline.
-    dataset=None runs all four datasets (EB excluded due to NaN corruption).
-    """
+    """dataset=None -> run all four datasets (automatically skips EB)."""
     targets = (
         [dataset] if dataset
         else [d for d in DATASETS_CONFIG if d != "EB"]
@@ -116,8 +121,11 @@ def run_pipeline(dataset=None):
         df.to_csv(_VAL_OUTPUT / "ALL_datasets_summary.csv", index=False)
         print(f"\n{'='*70}\nSummary\n{'='*70}")
         print(df.to_string(index=False))
-        print(f"\nOutputs saved to: {_VAL_OUTPUT}")
+        print(f"\nOutput directory: {_VAL_OUTPUT}")
         return df
 
 
 print("sapphire_validation_all.py loaded  ->  run_pipeline()")
+
+if __name__ == "__main__":
+    run_pipeline()

@@ -143,7 +143,8 @@ SAPPHIRE/
 │                                #   compute_per_cell_metrics, compute_composite
 │
 ├── scripts/                     # Analysis and reproduction scripts
-│   ├── run_pipeline.py          # Main validation pipeline (all 4 datasets)
+│   ├── sapphire_core.py         # Standalone copy of core.py, loaded via exec()
+│   ├── sapphire_validation_all.py  # Main validation pipeline (all 4 datasets)
 │   ├── ablation.py              # Ablation analysis and violin plots
 │   ├── method_comparison.py     # SAPPHIRE vs CytoTRACE vs expression entropy
 │   ├── holdout_validation.py    # Strict holdout-cell validation (20 splits)
@@ -156,21 +157,26 @@ SAPPHIRE/
 │   ├── umap_plots.py            # Cell UMAP with SAPPHIRE score overlays
 │   ├── umap_with_module_overlay.py  # Module activation overlays on UMAP
 │   ├── gene_umap.py             # Gene UMAP coloured by module
+│   ├── gene_umap_B.py           # Gene UMAP, alternate (transposed-PCA) method
+│   ├── figures_13_14.py         # Paper Figures 13-14
 │   ├── generate_report.py       # Summary PDF report
+│   ├── module_enrichment.R      # GO enrichment in R (clusterProfiler)
 │   └── run_all.py               # Run all analyses in sequence
 │
 ├── docs/
 │   ├── figures/                 # Output figures
-│   └── enrichment/              # GO enrichment results and dotplots
-│
-├── examples/
-│   ├── run_example.py
-│   └── data/
-│       └── example_small.h5ad
+│   └── enrichment/               # GO enrichment results and dotplots
 │
 ├── requirements.txt
 ├── setup.py
 └── README.md
+```
+
+All paths to your local data directory are resolved via the `SAPPHIRE_DATA_ROOT`
+environment variable (falling back to a `data/` folder next to the repo if unset):
+
+```bash
+export SAPPHIRE_DATA_ROOT=/path/to/your/data
 ```
 
 ---
@@ -180,9 +186,11 @@ SAPPHIRE/
 ### 1. Run the main validation pipeline
 
 ```bash
-conda activate your_env
+# Set this to wherever your h5ad files and data/ subfolders live
+export SAPPHIRE_DATA_ROOT=/path/to/your/data
+
 cd SAPPHIRE
-python scripts/run_pipeline.py
+python scripts/sapphire_validation_all.py
 ```
 
 This runs SAPPHIRE on all four datasets (Cardiomyocyte, Endoderm, Kidney, Neuro) and saves per-cell metrics, module activation matrices, and AUC summaries.

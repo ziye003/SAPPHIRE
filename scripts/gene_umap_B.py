@@ -7,7 +7,6 @@ Gene UMAP (Method B):
   - One plot per dataset + a 2x2 overview figure
 
 Usage:
-    conda activate liver_adar1_py
     python gene_umap_B.py
 
 Output (data/umap/):
@@ -26,8 +25,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 warnings.filterwarnings("ignore")
 
-sys.path.insert(0, "/Users/ziye/Documents/sapphire_package/")
-exec(open("/Users/ziye/Documents/sapphire_package/sapphire_core.py").read(), globals())
+_here = os.path.dirname(os.path.abspath(__file__)) if "__file__" in dir() else "."
+exec(open(os.path.join(_here, "sapphire_core.py")).read(), globals())
 
 try:
     import umap as umap_lib
