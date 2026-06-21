@@ -5,9 +5,21 @@ Generate three types of UMAP plots. Run as-is; no configuration needed.
 
 Output (data/umap_overlay/):
   1. ALL_datasets_umap_timepoint.png       -- 4 datasets, timepoint, 2x2
+                                               (disabled by default, see RUN_FIGURE_1)
   2. {Dataset}_umap_sapphire_scores.png    -- timepoint/entropy/dispersion/composite, 1 per dataset
-  3. Cardiomyocyte_umap_module_overlay.png -- key module activation overlays (M4, etc.)
-  4. ALL_umap_module_overlay.png           -- key module per dataset, 2x2 overview
+  3. Cardiomyocyte_umap_module_overlay.png -- key module activation overlays (M4, M6, M2, composite)
+  4. ALL_umap_module_overlay.png           -- key module per dataset, 1x4
+
+Color scheme (consistent across every figure in this script and in umap_plots.py):
+  Timepoint           -- Greys   (ground-truth label, not a computed score)
+  Pathway Entropy      -- Blues
+  Network Dispersion   -- Greens
+  Composite Score       -- Purples
+  Module Activation (any module, any dataset) -- YlOrRd (red=high, yellow=low)
+
+Timepoint panels appear only once per dataset (in the score-overlay figures);
+the module-overlay figures show activation only, to avoid showing the same
+Timepoint UMAP twice across different figures.
 
 Usage:
     cd SAPPHIRE/scripts
@@ -38,29 +50,10 @@ sc.settings.verbosity = 0
 
 TARGET = ["Cardiomyocyte", "Endoderm", "Kidney", "Neuro"]
 
-# Key modules per dataset (based on GO enrichment results in the paper)
-KEY_MODULES = {
-    "Cardiomyocyte": {
-        "M4": ("Cardiac Commitment\n(heart contraction, D2 peak)", "#E63946"),
-        "M6": ("Cell Cycle\n(mitotic segregation)", "#457B9D"),
-        "M2": ("Terminal Maturation\n(RNA splicing, D15-D30)", "#2A9D8F"),
-    },
-    "Endoderm": {
-        "M4": ("Cell Cycle\n(chromosome segregation)", "#457B9D"),
-        "M3": ("Stem Cell Diff.\n(neural crest)", "#E63946"),
-        "M8": ("Wnt Signalling\n(gut morphogenesis)", "#2A9D8F"),
-    },
-    "Kidney": {
-        "M0": ("Metal Detox\n(proximal tubule)", "#E63946"),
-        "M2": ("ECM Organisation\n(collagen fibril)", "#2A9D8F"),
-        "M5": ("Oxidative Phosph.\n(metabolic maturation)", "#F4A261"),
-    },
-    "Neuro": {
-        "M2": ("Axonogenesis\n(neuron projection)", "#E63946"),
-        "M4": ("Dopaminergic Spec.\n(catecholamine transport)", "#457B9D"),
-        "M5": ("Cell Cycle\n(nuclear segregation)", "#2A9D8F"),
-    },
-}
+# All pathway/module activation panels use the same colormap (red->yellow),
+# so "how activated is this module" always means the same color everywhere
+# in the paper, regardless of which dataset or module is shown.
+ACTIVATION_CMAP = "YlOrRd"
 
 # Utility functions
 
@@ -69,8 +62,11 @@ def sort_tp(tp):
     return float(m.group(1)) if m else 0.0
 
 def tp_palette(tps):
-    cmap = plt.cm.Blues
-    return {tp: cmap(0.3 + 0.6 * i / max(len(tps)-1, 1)) for i, tp in enumerate(tps)}
+    # Greys, deliberately: Timepoint is a ground-truth label, not a computed
+    # score, so it stays visually distinct from every score/activation overlay
+    # (Entropy=Blues, Dispersion=Greens, Composite=Purples, Activation=YlOrRd).
+    cmap = plt.cm.Greys
+    return {tp: cmap(0.25 + 0.65 * i / max(len(tps)-1, 1)) for i, tp in enumerate(tps)}
 
 def get_umap(adata):
     if "X_umap" in adata.obsm:
@@ -230,7 +226,12 @@ for ds_name in TARGET:
 
 # ════════════════════════════════════════════════════════════════
 # Figure 3: Module activation overlay — Cardiomyocyte (key figure)
-#   [timepoint | M4 cardiac | M6 cell cycle | M2 maturation | composite]
+#   [M4 cardiac | M6 cell cycle | M2 maturation | composite]
+#
+# NOTE: Timepoint panel removed (advisor feedback: do not repeat the same
+# image across figures). This dataset's Timepoint UMAP is already shown as
+# panel 0 of Cardiomyocyte_umap_sapphire_scores.png above; refer back to it
+# for the timepoint reference when reading the module panels below.
 # ════════════════════════════════════════════════════════════════
 print("\n" + "="*60)
 print("  Figure 3: Module activation overlay — Cardiomyocyte")
@@ -269,47 +270,34 @@ if len(shared) < len(adata):
 pc_df = pc_df.loc[adata.obs_names]
 
 tps = sorted(adata.obs[time_col].unique(), key=sort_tp)
-pal = tp_palette(tps)
 
-# 5-panel figure: timepoint + M4 + M6 + M2 + composite
-fig, axes = plt.subplots(1, 5, figsize=(24, 5))
+# 4-panel figure: M4 + M6 + M2 + composite (timepoint dropped, see note above)
+fig, axes = plt.subplots(1, 4, figsize=(20, 5))
 fig.suptitle(
     "Cardiomyocyte — UMAP with Module Activation Overlays\n"
     "M4 shows transient cardiac commitment peak at D2 (1.67x baseline, p < 2.2x10^-308)",
     fontsize=12, fontweight="bold")
 
-# Panel 0: timepoint
-ax = axes[0]
-for tp in tps:
-    mask = (adata.obs[time_col] == tp).values
-    ax.scatter(u1[mask], u2[mask], c=[pal[tp]], s=4, alpha=0.6,
-               linewidths=0, rasterized=True)
-handles = [mpatches.Patch(color=pal[tp], label=tp) for tp in tps]
-ax.legend(handles=handles, title="Timepoint", fontsize=7.5,
-          title_fontsize=8, loc="best", framealpha=0.8)
-ax.set_title("Timepoint", fontsize=11, fontweight="bold")
-ax.set_xlabel("UMAP 1", fontsize=9); ax.set_ylabel("UMAP 2", fontsize=9)
-ax.tick_params(labelsize=7); ax.grid(False)
-ax.set_aspect("equal", adjustable="datalim")
-
-# Panels 1-3: key modules
-for ax, (mod_id, cmap_name, title) in zip(axes[1:4], [
-    ("M4", "YlOrRd",  "M4: Cardiac Commitment\n(heart contraction, D2 peak)"),
-    ("M6", "Blues",   "M6: Cell Cycle\n(mitotic segregation, early)"),
-    ("M2", "Greens",  "M2: Terminal Maturation\n(RNA splicing, D15-D30)"),
+# Panels 0-2: key modules (all share ACTIVATION_CMAP -- red=high, yellow=low,
+# consistently across every module/dataset in the paper)
+for ax, (mod_id, title) in zip(axes[0:3], [
+    ("M4", "M4: Cardiac Commitment\n(heart contraction, D2 peak)"),
+    ("M6", "M6: Cell Cycle\n(mitotic segregation, early)"),
+    ("M2", "M2: Terminal Maturation\n(RNA splicing, D15-D30)"),
 ]):
     vals = mod_activation.get(mod_id, np.zeros(len(u1)))
     vmin, vmax = np.percentile(vals, 2), np.percentile(vals, 98)
-    sc_plot = ax.scatter(u1, u2, c=vals, cmap=cmap_name, vmin=vmin, vmax=vmax,
+    sc_plot = ax.scatter(u1, u2, c=vals, cmap=ACTIVATION_CMAP, vmin=vmin, vmax=vmax,
                          s=4, alpha=0.65, linewidths=0, rasterized=True)
     plt.colorbar(sc_plot, ax=ax, shrink=0.75, pad=0.02, label="Activation")
     ax.set_title(title, fontsize=10, fontweight="bold")
     ax.set_xlabel("UMAP 1", fontsize=9)
+    ax.set_ylabel("UMAP 2", fontsize=9)
     ax.tick_params(labelsize=7); ax.grid(False)
     ax.set_aspect("equal", adjustable="datalim")
 
-# Panel 4: composite score
-ax = axes[4]
+# Panel 3: composite score
+ax = axes[3]
 vals = pc_df["composite"].values.astype(float)
 vmin, vmax = np.percentile(vals, 2), np.percentile(vals, 98)
 sc_plot = ax.scatter(u1, u2, c=vals, cmap="Purples", vmin=vmin, vmax=vmax,
@@ -329,48 +317,36 @@ print(f"  -> {out}")
 
 
 # ════════════════════════════════════════════════════════════════
-# Figure 4: 2x2 module overlay overview — all 4 datasets
-#   Each dataset: timepoint (left) + key transitional module (right)
+# Figure 4: module overlay overview — all 4 datasets, key module only
+#   (Timepoint panel dropped -- see notes above)
 # ════════════════════════════════════════════════════════════════
 print("\n" + "="*60)
-print("  Figure 4: Module overlay overview (all datasets, 2x4 panels)")
+print("  Figure 4: Module overlay overview (all datasets, 1x4 panels)")
 print("="*60)
 
-# Key module per dataset (most biologically informative transitional module)
+# Key module per dataset (most biologically informative transitional module).
+# NOTE: Timepoint panels removed (advisor feedback: do not repeat the same
+# image across figures). Each dataset's Timepoint UMAP is already shown in
+# Figures 1-4 of the paper (the per-dataset score-overlay panels); refer back
+# to those for the timepoint reference. All four modules below now share
+# ACTIVATION_CMAP so "more red/yellow = more activated" means the same thing
+# in every panel, for every dataset.
 HIGHLIGHT = {
-    "Cardiomyocyte": ("M4", "YlOrRd",  "M4: Cardiac Commitment (D2 peak)"),
-    "Endoderm":      ("M8", "Oranges", "M8: Wnt Signalling (gut morphogenesis)"),
-    "Kidney":        ("M0", "Reds",    "M0: Metal Detox (proximal tubule)"),
-    "Neuro":         ("M2", "PuRd",    "M2: Axonogenesis (neuron projection)"),
+    "Cardiomyocyte": ("M4", "M4: Cardiac Commitment (D2 peak)"),
+    "Endoderm":      ("M8", "M8: Wnt Signalling (gut morphogenesis)"),
+    "Kidney":        ("M0", "M0: Metal Detox (proximal tubule)"),
+    "Neuro":         ("M2", "M2: Axonogenesis (neuron projection)"),
 }
 
-fig, axes = plt.subplots(2, 4, figsize=(24, 11))
+fig, axes = plt.subplots(1, 4, figsize=(24, 5.5))
 fig.suptitle(
-    "SAPPHIRE — Module Activation Overlays Across Differentiation Systems\n"
-    "Left: timepoint identity  |  Right: key module activation score",
+    "SAPPHIRE — Key Module Activation Across Differentiation Systems\n"
+    "(see Figures 1-4 for each dataset's Timepoint UMAP reference)",
     fontsize=13, fontweight="bold")
 
-# Explicit (row, timepoint_col, module_col) assignment for each dataset.
-# FIX: the previous version used conditional indexing (axes[0 if ... else 1, ...])
-# separately in two loops. Endoderm's module panel landed on axes[1,3], which the
-# second loop (Kidney/Neuro) never touched, but Kidney's panels at axes[0,0]/[0,1]
-# and Neuro's at axes[1,0]/[1,1] silently overwrote Cardiomyocyte's panels at the
-# same coordinates, and axes[0,2]/[0,3] (meant for Endoderm) were partially never
-# drawn into because Endoderm's timepoint panel used axes[0,2] but nothing wrote
-# axes[1,2]. Net effect: two of the eight panels rendered blank. Explicit per-dataset
-# layout below guarantees every one of the 8 axes is written to exactly once.
-PANEL_LAYOUT = {
-    "Cardiomyocyte": (0, 0, 1),
-    "Endoderm":      (0, 2, 3),
-    "Kidney":        (1, 0, 1),
-    "Neuro":         (1, 2, 3),
-}
-
-for ds_name in ["Cardiomyocyte", "Endoderm", "Kidney", "Neuro"]:
+for ax, ds_name in zip(axes, ["Cardiomyocyte", "Endoderm", "Kidney", "Neuro"]):
     cfg      = DATASETS_CONFIG[ds_name]
-    time_col = cfg["time_col"]
-    mod_id, cmap_name, mod_title = HIGHLIGHT[ds_name]
-    row, tp_col, mod_col = PANEL_LAYOUT[ds_name]
+    mod_id, mod_title = HIGHLIGHT[ds_name]
     print(f"\n  {ds_name}")
 
     adata  = load_and_prepare(ds_name, cfg)
@@ -385,34 +361,16 @@ for ds_name in ["Cardiomyocyte", "Endoderm", "Kidney", "Neuro"]:
     gene_idx = modules.get(mod_id, [])
     mod_vals = X[:, gene_idx].mean(axis=1) if len(gene_idx) > 0 else np.zeros(len(u1))
 
-    tps = sorted(adata.obs[time_col].unique(), key=sort_tp)
-    pal = tp_palette(tps)
-
-    # Timepoint panel
-    ax = axes[row, tp_col]
-    for tp in tps:
-        mask = (adata.obs[time_col] == tp).values
-        ax.scatter(u1[mask], u2[mask], c=[pal[tp]], s=3, alpha=0.55,
-                   linewidths=0, rasterized=True)
-    handles = [mpatches.Patch(color=pal[tp], label=tp) for tp in tps]
-    ax.legend(handles=handles, title="Timepoint", fontsize=6.5,
-              title_fontsize=7, loc="best", framealpha=0.8, ncol=2 if len(tps)>4 else 1)
-    ax.set_title(f"{ds_name}\nTimepoint", fontsize=10, fontweight="bold")
-    ax.set_xlabel("UMAP 1", fontsize=8); ax.set_ylabel("UMAP 2", fontsize=8)
+    vmin, vmax = np.percentile(mod_vals, 2), np.percentile(mod_vals, 98)
+    sc_plot = ax.scatter(u1, u2, c=mod_vals, cmap=ACTIVATION_CMAP,
+                         vmin=vmin, vmax=vmax, s=3, alpha=0.65,
+                         linewidths=0, rasterized=True)
+    plt.colorbar(sc_plot, ax=ax, shrink=0.75, pad=0.02, label="Activation")
+    ax.set_title(f"{ds_name}\n{mod_title}", fontsize=10, fontweight="bold")
+    ax.set_xlabel("UMAP 1", fontsize=8)
+    ax.set_ylabel("UMAP 2", fontsize=8)
     ax.tick_params(labelsize=6); ax.grid(False)
     ax.set_aspect("equal", adjustable="datalim")
-
-    # Module activation panel
-    ax2 = axes[row, mod_col]
-    vmin, vmax = np.percentile(mod_vals, 2), np.percentile(mod_vals, 98)
-    sc_plot = ax2.scatter(u1, u2, c=mod_vals, cmap=cmap_name,
-                          vmin=vmin, vmax=vmax, s=3, alpha=0.65,
-                          linewidths=0, rasterized=True)
-    plt.colorbar(sc_plot, ax=ax2, shrink=0.75, pad=0.02, label="Activation")
-    ax2.set_title(f"{ds_name}\n{mod_title}", fontsize=10, fontweight="bold")
-    ax2.set_xlabel("UMAP 1", fontsize=8)
-    ax2.tick_params(labelsize=6); ax2.grid(False)
-    ax2.set_aspect("equal", adjustable="datalim")
 
     del adata, modules; gc.collect()
 

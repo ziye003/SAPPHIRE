@@ -36,9 +36,13 @@ os.makedirs(OUT_DIR, exist_ok=True)
 sc.settings.verbosity = 0
 
 # Timepoint colour scheme (independent gradient per dataset; early=light, late=dark)
+# Uses Greys deliberately: Timepoint is the ground-truth label, not a computed
+# score, so it gets a neutral colormap distinct from every score overlay
+# (Entropy=Blues, Dispersion=Greens, Composite=Purples). Using a blue-family
+# map here as well made Timepoint and Pathway Entropy visually indistinguishable.
 def tp_palette(tps):
-    cmap = plt.cm.viridis
-    return {tp: cmap(i / max(len(tps) - 1, 1)) for i, tp in enumerate(tps)}
+    cmap = plt.cm.Greys
+    return {tp: cmap(0.25 + 0.65 * i / max(len(tps) - 1, 1)) for i, tp in enumerate(tps)}
 
 def sort_tp(tp):
     m = re.search(r"(\d+(?:\.\d+)?)", str(tp))
